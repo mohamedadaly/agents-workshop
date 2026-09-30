@@ -8,5 +8,6 @@ dependencies = [
     "deepagents>=0.7.20",
     "langchain-community>=0.4.2",
     "langchain-ollama>=1.1.0",
+    "mlflow>=3.16.1",
     "streamlit>=1.64.0",
 ]
