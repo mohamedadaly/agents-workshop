@@ -63,6 +63,18 @@ def build_agent(model: str, base_url: str, db_uri: str, max_steps: int):
     return agent, tool_names, db.get_usable_table_names()
 
 
+def render_trajectory(trajectory):
+    if not trajectory:
+        return
+    with st.expander("Agent trajectory"):
+        for msg in trajectory:
+            if getattr(msg, "tool_calls", None):
+                calls = ", ".join(f"{tc['name']}({tc['args']})" for tc in msg.tool_calls)
+                st.markdown(f"Tool Call: `{calls}`")
+            else:
+                st.markdown(f"{msg.type}: {msg.content or msg.additional_kwargs}")
+
+
 # --- Sidebar: configuration ---------------------------------------------------
 with st.sidebar:
     st.header("Configuration")
@@ -128,6 +140,7 @@ st.session_state.setdefault("messages", [])
 for msg in st.session_state["messages"]:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
+        render_trajectory(msg.get("trajectory"))
 
 if not st.session_state.get("agent_ready"):
     st.info("Set the database URI in the sidebar, then click **Connect**.")
@@ -158,8 +171,7 @@ elif question := st.chat_input("Ask a question about the database…"):
         answer = trajectory[-1].content if trajectory else None
         if answer:
             st.markdown(answer)
-            if trajectory:
-                with st.expander("Agent trajectory"):
-                    for msg in trajectory:
-                        st.text(f"{msg.type}: {msg.content or msg.additional_kwargs}")
-            st.session_state["messages"].append({"role": "assistant", "content": answer})
+            render_trajectory(trajectory)
+            st.session_state["messages"].append(
+                {"role": "assistant", "content": answer, "trajectory": trajectory}
+            )
