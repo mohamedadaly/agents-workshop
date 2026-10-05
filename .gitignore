@@ -10,3 +10,5 @@ wheels/
 .venv
 
 *.db*
+
+.DS_Store

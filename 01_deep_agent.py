@@ -5,9 +5,10 @@ Run with:
     uv run streamlit run 01_deep_agent.py
 
 View traces with:
-    uv run mlflow ui --backend-store-uri sqlite:///mlflow.db
+    uv run mlflow ui --backend-store-uri sqlite:///data/mlflow.db
 """
 
+# --- Setup ---------------------------------------------------------------
 import uuid
 
 import mlflow
@@ -15,9 +16,16 @@ import streamlit as st
 
 st.set_page_config(page_title="SQL Deep Agent (LangChain + Ollama)", layout="wide")
 
+# One call enables tracing for every LangChain/LangGraph call made below —
+# each agent.invoke() becomes a trace with nested spans for the model and
+# tool calls. View them with `mlflow ui --backend-store-uri sqlite:///data/mlflow.db`.
+mlflow.set_tracking_uri("sqlite:///data/mlflow.db")
 mlflow.set_experiment("agents-workshop")
 mlflow.langchain.autolog()
 
+# --- System prompt: steers the agent's ReAct loop (passed to create_deep_agent
+# below as system_prompt). These four rules are what keep it from guessing at
+# schemas, skipping validation, or running destructive SQL.
 INSTRUCTIONS = """You are an agent designed to interact with a SQL database.
 
 Given an input question, create a syntactically correct sqlite query, run it,
@@ -38,6 +46,7 @@ Answer in plain language. Do not describe the database schema or the steps
 you took.
 """
 
+# --- Core LangChain code: the four pieces that make up the agent ----------
 from deepagents import create_deep_agent
 from langchain_community.agent_toolkits import SQLDatabaseToolkit
 from langchain_community.utilities import SQLDatabase
@@ -47,16 +56,25 @@ from langgraph.checkpoint.memory import InMemorySaver
 def build_agent(model: str, base_url: str, db_uri: str, max_steps: int):
     """Configure a LangChain deep agent over a SQL database and return (agent, table_names)."""
 
+    # 1. Model — a local Ollama model. temperature=0 keeps SQL generation
+    # deterministic; validate_model_on_init fails fast if it isn't pulled yet.
     llm = ChatOllama(model=model, base_url=base_url, validate_model_on_init=True, temperature=0)
 
+    # 2. Tools — SQLDatabaseToolkit wraps the DB connection into four
+    # ready-made LangChain tools: sql_db_list_tables, sql_db_schema,
+    # sql_db_query_checker, sql_db_query.
     db = SQLDatabase.from_uri(db_uri)
     tools = SQLDatabaseToolkit(db=db, llm=llm).get_tools()
 
+    # 3 & 4. Prompt + memory, assembled: create_deep_agent wraps the model,
+    # tools, system prompt (step 3 above), and checkpointer into a LangGraph
+    # ReAct loop — with planning and a virtual file system built in. This
+    # agent only ever reaches for the four SQL tools above.
     agent = create_deep_agent(
         model=llm,
         tools=tools,
         system_prompt=INSTRUCTIONS,
-        checkpointer=InMemorySaver(),
+        checkpointer=InMemorySaver(),  # in-memory per-thread message history
     )
     st.session_state["recursion_limit"] = max_steps
     tool_names = [tool.name for tool in tools]
@@ -64,6 +82,8 @@ def build_agent(model: str, base_url: str, db_uri: str, max_steps: int):
 
 
 def render_trajectory(trajectory):
+    """Render an expander listing the agent's steps for one turn: tool calls
+    (name + args) and any plain message content, in the order they happened."""
     if not trajectory:
         return
     with st.expander("Agent trajectory"):
@@ -75,7 +95,10 @@ def render_trajectory(trajectory):
                 st.markdown(f"{msg.type}: {msg.content or msg.additional_kwargs}")
 
 
-# --- Sidebar: configuration ---------------------------------------------------
+# --- Sidebar: configuration + connection state -----------------------------
+# Streamlit reruns this whole script top-to-bottom on every interaction, so
+# widget values below are just read fresh each time; actually (re)building the
+# agent only happens when the Connect button is clicked (see `if connect_clicked`).
 with st.sidebar:
     st.header("Configuration")
 
@@ -97,8 +120,8 @@ with st.sidebar:
     st.subheader("Database")
     db_uri = st.text_input(
         "SQLAlchemy URI",
-        value="sqlite:///Chinook.db",
-        help="e.g. sqlite:///Chinook.db, postgresql://user:pw@host/db",
+        value="sqlite:///data/Chinook.db",
+        help="e.g. sqlite:///data/Chinook.db, postgresql://user:pw@host/db",
     )
 
     max_steps = st.slider("Max recursion steps", 5, 100, 50)
@@ -106,9 +129,12 @@ with st.sidebar:
     col_connect, col_clear = st.columns(2)
     connect_clicked = col_connect.button("Connect", type="primary", use_container_width=True)
     if col_clear.button("Clear chat", use_container_width=True):
+        # A fresh thread_id makes the checkpointer start a brand-new
+        # conversation on the next turn, instead of recalling the old one.
         st.session_state["messages"] = []
         st.session_state["thread_id"] = str(uuid.uuid4())
 
+    # Once connected, show what the agent has access to.
     if st.session_state.get("agent_ready"):
         st.success(f"Connected — {st.session_state.get('connected_model')}")
         with st.expander(f"Tools ({len(st.session_state.get('tool_names', []))})"):
@@ -117,6 +143,9 @@ with st.sidebar:
             st.write(st.session_state.get("tables", []))
 
 
+# Build (or rebuild) the agent and stash it in session_state — this is the
+# only place build_agent() is called, so changing a sidebar setting has no
+# effect until you click Connect again.
 if connect_clicked:
     try:
         with st.spinner("Connecting…"):
@@ -127,16 +156,22 @@ if connect_clicked:
         st.session_state["connected_model"] = model
         st.session_state["agent_ready"] = True
         st.session_state.setdefault("messages", [])
+        # thread_id is the checkpointer's conversation key — created once per
+        # connection and reused across turns (see run_config below) so the
+        # agent remembers earlier questions in the same session.
         st.session_state.setdefault("thread_id", str(uuid.uuid4()))
         st.rerun()
     except Exception as e:
         st.sidebar.error(f"Connection failed: {e}")
 
 
-# --- Main: chat ---------------------------------------------------------------
+# --- Main: chat -------------------------------------------------------------
 st.title("SQL Deep Agent")
 st.session_state.setdefault("messages", [])
 
+# Replay chat history on every rerun — Streamlit doesn't persist UI elements
+# across reruns, so this (plus storing `trajectory` per message) is what makes
+# past turns' answers and trajectories still visible after a new question.
 for msg in st.session_state["messages"]:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
@@ -151,15 +186,24 @@ elif question := st.chat_input("Ask a question about the database…"):
 
     with st.chat_message("assistant"):
         trajectory = []
+        # configurable.thread_id is how the checkpointer finds (and keeps
+        # extending) this conversation's message history across turns.
         run_config = {
             "recursion_limit": st.session_state.get("recursion_limit", 50),
             "configurable": {"thread_id": st.session_state["thread_id"]},
         }
         with st.spinner("Thinking…"):
             try:
+                # The checkpointer returns the FULL message history for this
+                # thread_id (every prior turn), so grab its length first —
+                # that's how we slice out just this turn's new messages below.
                 prior_state = st.session_state["agent"].get_state(run_config)
                 prior_len = len(prior_state.values.get("messages", []))
 
+                # invoke() runs the agent's ReAct loop to completion: model ->
+                # tool calls -> tool results -> model -> ... until the model
+                # replies without calling a tool. final_state["messages"] is
+                # the whole conversation so far, old turns included.
                 final_state = st.session_state["agent"].invoke(
                     {"messages": [{"role": "user", "content": question}]},
                     config=run_config,
@@ -168,6 +212,8 @@ elif question := st.chat_input("Ask a question about the database…"):
             except Exception as e:
                 st.exception(e)
 
+        # The agent only stops once the model replies with no tool calls, so
+        # the last message in this turn's trajectory is always the answer.
         answer = trajectory[-1].content if trajectory else None
         if answer:
             st.markdown(answer)

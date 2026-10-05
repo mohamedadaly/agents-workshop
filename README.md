@@ -63,14 +63,14 @@ uv run streamlit run 01_deep_agent.py
 ```
 
 This opens the app in your browser. In the sidebar, pick a model, confirm the database URI
-(defaults to the included `Chinook.db`), and click **Connect** before chatting.
+(defaults to the included `data/Chinook.db`), and click **Connect** before chatting.
 
 ### 8. (Optional) View MLflow traces
 
 Every question you ask is traced automatically. To browse the traces in a separate terminal:
 
 ```bash
-uv run mlflow ui --backend-store-uri sqlite:///mlflow.db
+uv run mlflow ui --backend-store-uri sqlite:///data/mlflow.db
 ```
 
 Then open the URL it prints (typically [http://localhost:5000](http://localhost:5000)).
