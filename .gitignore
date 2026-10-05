@@ -12,3 +12,4 @@ wheels/
 *.db*
 
 .DS_Store
+mlruns/
