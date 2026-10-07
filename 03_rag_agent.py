@@ -16,10 +16,10 @@ View traces with:
 """
 
 # --- Setup ---------------------------------------------------------------
-import hashlib
-import os
-import tempfile
-import uuid
+import hashlib  # fingerprints (pdf bytes, url, embedding model) into a db folder name
+import os  # path joins, checking whether a Chroma folder already exists
+import tempfile  # spools an uploaded PDF to a real path PyPDFLoader can open
+import uuid  # per-connection thread_id for the checkpointer
 import warnings
 
 import mlflow
@@ -46,6 +46,8 @@ INSTRUCTIONS = """You are a RAG (Retrieval-Augmented Generation) agent that answ
 questions using an uploaded PDF and a crawled set of documentation pages,
 both indexed into the same `rag_search` tool.
 
+NEVER answer from your knowledge.
+
 Always try `rag_search` first. Only use `duckduckgo_search` if neither the
 PDF nor the documentation pages contain the answer — rag_search comes back
 empty, or its passages are clearly unrelated to the question.
@@ -58,7 +60,7 @@ Whichever tool you used, always report the source of your answer:
 - From `rag_search`, a documentation page: end your answer with
   `Source: <url>` — copy the URL verbatim from the result.
 - From `duckduckgo_search`: say plainly that the answer came from a web
-  search, not the indexed documents.
+  search, not the indexed documents. Add the link if available.
 
 If none of the tools turn up an answer, say so instead of guessing.
 
@@ -79,6 +81,9 @@ from langgraph.checkpoint.memory import InMemorySaver
 # Non-page assets RecursiveUrlLoader's link-following turns up (icons, fonts,
 # the site's own sitemap.xml, ...) — garbage once run through an HTML text
 # extractor, so they're dropped by extension rather than indexed as "pages".
+# Confirmed by actually crawling docs.incorta.com: of 36 URLs the loader
+# followed, this list is what separates the 15 real pages from the other 21
+# (a sitemap.xml, webfonts, a PNG icon, ...).
 _SKIP_URL_EXTENSIONS = (
     ".png", ".jpg", ".jpeg", ".gif", ".svg", ".ico",
     ".woff", ".woff2", ".ttf", ".css", ".js",
@@ -86,64 +91,96 @@ _SKIP_URL_EXTENSIONS = (
 )
 
 
-def _db_path(pdf_bytes: bytes, crawl_url: str, embedding_model: str) -> str:
-    """A data/ path keyed by a hash of (PDF content, crawl URL, embedding
-    model) — stable across reconnects with the same trio, but a fresh path
-    (so a fresh build, never a stale mix) the moment any one of them changes.
-    The embedding model matters as much as the content: two models' vectors
-    aren't comparable, so reusing an old collection after switching models
-    would silently return nonsense similarity scores."""
-    key = pdf_bytes + crawl_url.encode() + embedding_model.encode()
-    digest = hashlib.sha256(key).hexdigest()[:16]
-    return os.path.join("data", f"chroma_{digest}")
+# ----------------------------------------------------------------------------
+# RAG
+# ----------------------------------------------------------------------------
 
+class RAGTools:
+    """Owns the combined PDF + crawled-site Chroma index and exposes it to
+    the agent as a single search tool. All the indexing logic — reusing an
+    existing on-disk collection vs. building one from scratch — lives in
+    __init__, so by the time get_tools() is called the index is ready."""
 
-def _crawl_docs(url: str):
-    """Crawl `url` and every page reachable within 2 links of it (RecursiveUrlLoader's
-    own default max_depth), extracting plain text from each page's HTML and
-    dropping non-page assets the crawler's link-following also turns up."""
-    extractor = lambda html: bs4.BeautifulSoup(html, "html.parser").get_text(separator=" ", strip=True)
-    loader = RecursiveUrlLoader(url, max_depth=2, extractor=extractor, timeout=10)
-    return [
-        doc for doc in loader.load()
-        if not doc.metadata.get("source", "").split("?")[0].lower().endswith(_SKIP_URL_EXTENSIONS)
-    ]
+    def __init__(self, pdf_path: str, pdf_bytes: bytes, crawl_url: str,
+                 embedding_model: str, base_url: str, 
+                 chunk_size: int = 1000, chunk_overlap: int = 150):
+        # Kept around only so rag_search's citation() can fall back to it if
+        # a chunk's own metadata is somehow missing a 'source' — see below.
+        self.pdf_path = pdf_path
+        embeddings = OllamaEmbeddings(model=embedding_model, base_url=base_url)
 
+        # Index — keyed by (pdf, url, embedding model) so the expensive part
+        # (loading the PDF, crawling the site, and embedding every chunk —
+        # one Ollama call each) only ever happens once per distinct trio.
+        # Reconnecting with the exact same PDF, URL, and model just reopens
+        # the Chroma collection already on disk; changing any one of them
+        # computes a new path and builds a fresh collection instead of
+        # appending to (or confusing itself with) the old one.
+        db_path = self._db_path(pdf_bytes, crawl_url, embedding_model)
+        # Chroma(...) itself is cheap and safe either way: with
+        # create_collection_if_not_exists=True (the default), it opens the
+        # collection already on disk at db_path, or creates an empty one if
+        # db_path doesn't exist yet — no PDF read, no crawl, no embedding
+        # calls happen just from constructing it.
+        self.vectorstore = Chroma(
+            collection_name="docs",
+            persist_directory=db_path,
+            embedding_function=embeddings,
+            create_collection_if_not_exists=True,  # Defaults to True
+        )
+        # Index documents if the current collection is empty.
+        if self.num_chunks == 0:
+            splitter = RecursiveCharacterTextSplitter(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
+            # One Document per PDF page (so page numbers survive into chunk
+            # metadata) plus one per crawled page (URL as its own citation).
+            # Splitting both the same way means rag_search's
+            # similarity_search() below never has to know which source a
+            # given chunk came from.
+            pdf_chunks = splitter.split_documents(PyPDFLoader(pdf_path).load())
+            web_chunks = splitter.split_documents(self._crawl_docs(crawl_url))
+            self.vectorstore.add_documents(pdf_chunks + web_chunks)
 
-def build_agent(
-    model: str, base_url: str, pdf_path: str, pdf_bytes: bytes, crawl_url: str, embedding_model: str, max_steps: int
-):
-    """Configure a LangChain deep agent over a combined PDF + crawled-site
-    Chroma index and return (agent, tool_names, num_chunks)."""
+    @staticmethod
+    def _db_path(pdf_bytes: bytes, crawl_url: str, embedding_model: str) -> str:
+        """A data/ path keyed by a hash of (PDF content, crawl URL, embedding
+        model) — stable across reconnects with the same trio, but a fresh
+        path (so a fresh build, never a stale mix) the moment any one of
+        them changes. The embedding model matters as much as the content:
+        two models' vectors aren't comparable, so reusing an old collection
+        after switching models would silently return nonsense similarity
+        scores."""
+        key = pdf_bytes + crawl_url.encode() + embedding_model.encode()
+        digest = hashlib.sha256(key).hexdigest()[:16]
+        return os.path.join("data", f"chroma_{digest}")
 
-    # 1. Model — a local Ollama model. temperature=0 keeps answers and source
-    # citations consistent; validate_model_on_init fails fast if it isn't pulled yet.
-    llm = ChatOllama(model=model, base_url=base_url, validate_model_on_init=True, temperature=0)
-    embeddings = OllamaEmbeddings(model=embedding_model, base_url=base_url)
+    @staticmethod
+    def _crawl_docs(url: str):
+        """Crawl `url` and every page reachable within 2 links of it
+        (RecursiveUrlLoader's own default max_depth), extracting plain text
+        from each page's HTML and dropping non-page assets the crawler's
+        link-following also turns up.
 
-    # 2. Index — keyed by (pdf, url, embedding model) so the expensive part
-    # (loading the PDF, crawling the site, and embedding every chunk — one
-    # Ollama call each) only ever happens once per distinct trio. Reconnecting
-    # with the exact same PDF, URL, and model just reopens the Chroma
-    # collection already on disk; changing any one of them computes a new
-    # path and builds a fresh collection instead of appending to (or
-    # confusing itself with) the old one.
-    db_path = _db_path(pdf_bytes, crawl_url, embedding_model)
-    if os.path.isdir(db_path) and os.listdir(db_path):
-        vectorstore = Chroma(persist_directory=db_path, embedding_function=embeddings)
-    else:
-        splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=150)
-        # One Document per PDF page (so page numbers survive into chunk
-        # metadata) plus one per crawled page (URL as its own citation).
-        pdf_chunks = splitter.split_documents(PyPDFLoader(pdf_path).load())
-        web_chunks = splitter.split_documents(_crawl_docs(crawl_url))
-        vectorstore = Chroma.from_documents(pdf_chunks + web_chunks, embeddings, persist_directory=db_path)
+        RecursiveUrlLoader fetches `url` itself, regex-finds every href/src
+        on the page, recurses into each one up to max_depth hops, and runs
+        `extractor` over each page's raw HTML to turn it into a Document
+        (one per URL, with `source` = that URL in its metadata).
+        `prevent_outside` defaults to True, so it never wanders off
+        docs.incorta.com onto some external link it happens to find.
+        """
+        # BeautifulSoup just strips tags/scripts/styles down to visible text;
+        # get_text(separator=" ") keeps words from different elements from
+        # running together (e.g. a nav link glued straight onto a heading).
+        extractor = lambda html: bs4.BeautifulSoup(html, "html.parser").get_text(separator=" ", strip=True)
+        loader = RecursiveUrlLoader(url, max_depth=2, extractor=extractor, timeout=10)
+        return [
+            doc for doc in loader.load()
+            # Strip any query string before checking the extension, so
+            # "icon.png?v=abc123" (a real URL the crawl turned up) is still
+            # recognized as a PNG and filtered out.
+            if not doc.metadata.get("source", "").split("?")[0].lower().endswith(_SKIP_URL_EXTENSIONS)
+        ]
 
-    # 3. Tools — rag_search wraps the vectorstore as a retriever tool: every
-    # result is tagged with a citation the model can quote directly — a file
-    # name + page number for PDF passages, a URL for crawled pages.
-    # duckduckgo_search is the fallback for questions neither one covers.
-    def rag_search(query: str) -> str:
+    def rag_search(self, query: str) -> str:
         """Search the indexed PDF and documentation pages for passages
         relevant to the question.
 
@@ -154,22 +191,81 @@ def build_agent(
         tagged with its source — a file name + page number, or a URL —
         quote that citation in your final answer.
         """
-        results = vectorstore.similarity_search(query, k=4)
+        # k=4: embed the query, return the 4 closest chunks by vector
+        # distance — could be all 4 from the PDF, all 4 from the crawled
+        # site, or any mix; the vectorstore doesn't distinguish by source.
+        results = self.vectorstore.similarity_search(query, k=4)
         if not results:
             return "No relevant passages found in the indexed documents."
 
         def citation(doc):
+            # Web chunks: PyPDFLoader never produced them, so 'source' is
+            # just the page URL RecursiveUrlLoader set as metadata — quote
+            # it as-is, there's no page number to add.
             source = doc.metadata.get("source", "")
             if source.startswith("http://") or source.startswith("https://"):
                 return f"[Source: {source}]"
+            # PDF chunks: 'source' is the file path PyPDFLoader was given
+            # (basename only, so a temp upload path like /tmp/tmpXYZ.pdf
+            # doesn't leak into the citation); 'page_label' is the page
+            # number as printed on the page (falls back to the 0-indexed
+            # 'page' if a PDF has no page_label metadata at all).
             page = doc.metadata.get("page_label", doc.metadata.get("page"))
-            return f"[Source: {os.path.basename(source or pdf_path)}, page {page}]"
+            return f"[Source: {os.path.basename(source or self.pdf_path)}, page {page}]"
 
+        # Each result keeps its own bracketed citation directly above its
+        # text, so whichever chunks the model reads, the citation it needs
+        # to quote is sitting right next to them — not a separate lookup.
         return "\n\n".join(f"{citation(doc)}\n{doc.page_content}" for doc in results)
 
-    tools = [rag_search, DuckDuckGoSearchRun()]
+    def get_tools(self) -> list:
+        """The bound method bind_tools() (and the agent's dispatch) should
+        see — `self` is already filled in, so it reads like a free function."""
+        return [self.rag_search]
 
-    # 4 & 5. Prompt + memory, assembled: create_deep_agent wraps the model,
+    @property
+    def num_chunks(self) -> int:
+        """Total chunks in the index — _collection.count() is chromadb's own
+        native size check, whether the collection was just built or reopened."""
+        return self.vectorstore._collection.count()
+
+
+# ----------------------------------------------------------------------------
+# Search
+# ----------------------------------------------------------------------------
+
+class DuckDuckGoTools:
+    """Wraps the web-search fallback — the one tool rag_search can't cover,
+    for questions neither the PDF nor the crawled site answers."""
+
+    def __init__(self):
+        self._search = DuckDuckGoSearchRun()
+
+    def get_tools(self) -> list:
+        return [self._search]
+
+
+def build_agent(
+    model: str, base_url: str, pdf_path: str, pdf_bytes: bytes, crawl_url: str, embedding_model: str, max_steps: int
+):
+    """Configure a LangChain deep agent over a combined PDF + crawled-site
+    Chroma index and return (agent, tool_names, num_chunks)."""
+
+    # 1. Model — reasons and writes the final answer. temperature=0 keeps
+    # answers and source citations consistent; validate_model_on_init fails
+    # fast if it isn't pulled yet. (RAGTools builds its own embeddings model
+    # separately — a different Ollama model doing a different job, turning
+    # text into vectors rather than writing answers.)
+    llm = ChatOllama(model=model, base_url=base_url, validate_model_on_init=True, temperature=0)
+
+    # 2. Tools — RAGTools' __init__ does all the indexing work (reuse an
+    # existing on-disk collection, or build one from scratch) before this
+    # line returns; DuckDuckGoTools just wraps the one ready-made search tool.
+    rag = RAGTools(pdf_path, pdf_bytes, crawl_url, embedding_model, base_url)
+    duckduckgo = DuckDuckGoTools()
+    tools = rag.get_tools() + duckduckgo.get_tools()
+
+    # 3 & 4. Prompt + memory, assembled: create_deep_agent wraps the model,
     # tools, system prompt (above), and checkpointer into a LangGraph ReAct
     # loop — with planning and a virtual file system built in.
     agent = create_deep_agent(
@@ -179,11 +275,10 @@ def build_agent(
         checkpointer=InMemorySaver(),  # in-memory per-thread message history
     )
     st.session_state["recursion_limit"] = max_steps
-    # rag_search is a plain function (name via __name__); DuckDuckGoSearchRun
-    # is a BaseTool (name via .name) — handle both.
+    # rag_search is a bound method (name via .__name__, same as a free
+    # function); DuckDuckGoSearchRun is a BaseTool (name via .name) — handle both.
     tool_names = [getattr(tool, "name", getattr(tool, "__name__", str(tool))) for tool in tools]
-    num_chunks = len(vectorstore.get(include=[])["ids"])
-    return agent, tool_names, num_chunks
+    return agent, tool_names, rag.num_chunks
 
 
 def render_trajectory(trajectory):
