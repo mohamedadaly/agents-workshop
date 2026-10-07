@@ -1,0 +1,419 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>03-RAG Agent</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+html,body{height:100%;background:#05060a;overflow:hidden;}
+.viewport{width:100vw;height:100vh;position:relative;overflow:hidden;}
+.slide-stage{width:1920px;height:1080px;position:absolute;top:50%;left:50%;
+  transform:translate(-50%,-50%) scale(1);transform-origin:center center;display:none;}
+.slide-stage.active{display:block;}
+.slide-stage > section{width:1920px !important;height:1080px !important;box-sizing:border-box;}
+.slide-stage h1,.slide-stage h2,.slide-stage h3,.slide-stage p,
+.slide-stage ul,.slide-stage ol,.slide-stage table{margin:0;}
+.slide-stage ul,.slide-stage ol{padding-left:1.2em;}
+.counter{position:fixed;bottom:14px;right:18px;color:#a6abba;
+  font:14px ui-monospace,'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;
+  background:rgba(0,0,0,0.45);padding:5px 12px;border-radius:12px;z-index:10;
+  user-select:none;}
+.hint{position:fixed;bottom:14px;left:18px;color:#6b7080;
+  font:13px ui-monospace,'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;
+  background:rgba(0,0,0,0.45);padding:5px 12px;border-radius:12px;z-index:10;
+  user-select:none;opacity:0;transition:opacity .3s;}
+.viewport:hover ~ .hint, .hint.show{opacity:1;}
+</style>
+</head>
+<body>
+<div class="viewport" id="viewport">
+<div class="slide-stage active" data-index="0">
+<section id="code03-overview" data-transition="fade" style="background:#0d0f13;color:#e8e6df;font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;padding:128px;display:flex;flex-direction:column;justify-content:center;align-items:flex-start;gap:40px">
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:28px;color:#f2b544">// 03 &middot; RAG AGENT</p>
+<h1 style="font-size:100px;font-weight:700;line-height:1.1;color:#f5f4f0">Grounding Answers in Real Documents</h1>
+<p style="font-size:36px;color:#c7cbd6"><b style="color:#e8e6df;font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace">03_rag_agent</b> rebuilds the deep agent from 01 with a retrieval tool over a PDF and a crawled documentation site, instead of a SQL database.</p>
+<div style="display:flex;gap:20px;align-items:center">
+<div style="border:1px solid #2a2e3a;border-radius:16px;padding:24px 36px;background:#14161c"><p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:28px;color:#c7cbd6">Index</p></div>
+<p style="font-size:32px;color:#a6abba">&rarr;</p>
+<div style="border:1px solid #2a2e3a;border-radius:16px;padding:24px 36px;background:#14161c"><p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:28px;color:#c7cbd6">Retrieve</p></div>
+<p style="font-size:32px;color:#a6abba">&rarr;</p>
+<div style="border:1px solid #2a2e3a;border-radius:16px;padding:24px 36px;background:#14161c"><p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:28px;color:#c7cbd6">Generate</p></div>
+<p style="font-size:32px;color:#a6abba">&rarr;</p>
+<div style="border:1px solid #f2b544;border-radius:16px;padding:24px 36px;background:#14161c"><p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:28px;color:#f2b544">Answer + Source</p></div>
+</div>
+<p style="position:absolute;left:128px;bottom:64px;font-size:24px;color:#a6abba">agents-workshop &middot; RAG agent</p>
+</section>
+</div>
+<div class="slide-stage" data-index="1">
+<section id="code03-contents" data-transition="fade" style="background:#14161c;color:#e8e6df;font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;padding:128px;display:flex;flex-direction:column;justify-content:center;gap:64px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:28px;color:#f2b544">// CONTENTS</p>
+<h2 style="font-size:80px;font-weight:700;color:#f5f4f0">What We&rsquo;ll Cover</h2>
+</div>
+<div style="display:flex;flex-direction:column;gap:0">
+<div style="display:flex;gap:48px;align-items:flex-start;padding:40px 0;border-top:1px solid #2a2e3a">
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:56px;color:#f2b544;width:140px">01</p>
+<div style="display:flex;flex-direction:column;gap:10px">
+<h3 style="font-size:36px;font-weight:600;color:#f5f4f0">Concept</h3>
+<p style="font-size:28px;color:#a6abba">What RAG is, why it matters, and the index-then-retrieve-then-generate pipeline behind it.</p>
+</div>
+</div>
+<div style="display:flex;gap:48px;align-items:flex-start;padding:40px 0;border-top:1px solid #2a2e3a;border-bottom:1px solid #2a2e3a">
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:56px;color:#5fd68f;width:140px">02</p>
+<div style="display:flex;flex-direction:column;gap:10px">
+<h3 style="font-size:36px;font-weight:600;color:#f5f4f0">Code</h3>
+<p style="font-size:28px;color:#a6abba">Where it&rsquo;s indexed, the two sources that feed it, how rag_search uses it, the prompt that steers it, and how it all assembles.</p>
+</div>
+</div>
+</div>
+</section>
+</div>
+<div class="slide-stage" data-index="2">
+<section id="code03-concept-what" data-transition="fade" style="background:#14161c;color:#e8e6df;font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;justify-content:flex-start;gap:48px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:28px;color:#f2b544">01 &middot; CONCEPT</p>
+<h2 style="font-size:72px;font-weight:700;color:#f5f4f0">What Is RAG?</h2>
+</div>
+<p style="font-size:30px;color:#a6abba"><b style="color:#c7cbd6">R</b>etrieval-<b style="color:#c7cbd6">A</b>ugmented <b style="color:#c7cbd6">G</b>eneration: before the model answers, look up passages relevant to the question from an external source, and hand the model that text alongside the question &mdash; instead of asking it to answer purely from what it memorized during training.</p>
+<div style="display:flex;gap:32px;flex:1">
+<div style="flex:1;display:flex;flex-direction:column;gap:16px;background:#1f222b;border:1px solid #2a2e3a;border-radius:16px;padding:40px">
+<h3 style="font-size:32px;font-weight:600;color:#a6abba">Without RAG</h3>
+<p style="font-size:26px;color:#c7cbd6">Question &rarr; model&rsquo;s frozen training data &rarr; answer. Whatever it learned at training time is all it has &mdash; nothing to point to.</p>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:16px;background:#1f222b;border:1px solid #5fd68f;border-radius:16px;padding:40px">
+<h3 style="font-size:32px;font-weight:600;color:#5fd68f">With RAG</h3>
+<p style="font-size:26px;color:#c7cbd6">Question &rarr; retrieve real passages &rarr; model reads them &rarr; answer, grounded in text it can cite.</p>
+</div>
+</div>
+<p style="position:absolute;left:128px;bottom:64px;font-size:24px;color:#a6abba">agents-workshop &middot; RAG agent</p>
+<p style="position:absolute;right:128px;bottom:64px;font-size:24px;color:#a6abba">1 of 11</p>
+</section>
+</div>
+<div class="slide-stage" data-index="3">
+<section id="code03-concept-why" data-transition="fade" style="background:#14161c;color:#e8e6df;font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;justify-content:flex-start;gap:48px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:28px;color:#f2b544">01 &middot; CONCEPT</p>
+<h2 style="font-size:72px;font-weight:700;color:#f5f4f0">Why We Need It</h2>
+</div>
+<div style="display:flex;gap:32px;flex:1">
+<div style="flex:1;display:flex;flex-direction:column;gap:16px;background:#1f222b;border:1px solid #2a2e3a;border-radius:16px;padding:40px">
+<h3 style="font-size:32px;font-weight:600;color:#5fd68f">Frozen knowledge</h3>
+<p style="font-size:26px;color:#c7cbd6">A model only knows what was in its training data &mdash; nothing after its cutoff, and nothing private like your own PDF or docs site.</p>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:16px;background:#1f222b;border:1px solid #2a2e3a;border-radius:16px;padding:40px">
+<h3 style="font-size:32px;font-weight:600;color:#5fd68f">Hallucination</h3>
+<p style="font-size:26px;color:#c7cbd6">When it doesn&rsquo;t actually know something, it guesses fluently rather than saying so &mdash; confidently wrong looks the same as confidently right.</p>
+</div>
+</div>
+<div style="display:flex;gap:32px;flex:1">
+<div style="flex:1;display:flex;flex-direction:column;gap:16px;background:#1f222b;border:1px solid #2a2e3a;border-radius:16px;padding:40px">
+<h3 style="font-size:32px;font-weight:600;color:#5fd68f">No citations</h3>
+<p style="font-size:26px;color:#c7cbd6">A plain model can&rsquo;t point to where an answer came from &mdash; there&rsquo;s no passage behind it to quote.</p>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:16px;background:#1f222b;border:1px solid #2a2e3a;border-radius:16px;padding:40px">
+<h3 style="font-size:32px;font-weight:600;color:#5fd68f">Private or oversized corpora</h3>
+<p style="font-size:26px;color:#c7cbd6">Your company&rsquo;s docs site or one specific PDF were never training data &mdash; too private, or too narrow, to have been baked in at all.</p>
+</div>
+</div>
+<p style="position:absolute;left:128px;bottom:64px;font-size:24px;color:#a6abba">agents-workshop &middot; RAG agent</p>
+<p style="position:absolute;right:128px;bottom:64px;font-size:24px;color:#a6abba">2 of 11</p>
+</section>
+</div>
+<div class="slide-stage" data-index="4">
+<section id="code03-concept-how" data-transition="fade" style="background:#14161c;color:#e8e6df;font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;justify-content:flex-start;gap:56px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:28px;color:#f2b544">01 &middot; CONCEPT</p>
+<h2 style="font-size:72px;font-weight:700;color:#f5f4f0">How It Works</h2>
+</div>
+<div style="display:flex;flex-direction:column;gap:20px">
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:24px;color:#f2b544">INDEX &mdash; ONCE</p>
+<div style="display:flex;gap:16px;align-items:center">
+<div style="border:1px solid #2a2e3a;border-radius:16px;padding:20px 32px;background:#1f222b"><p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:24px;color:#c7cbd6">Documents</p></div>
+<p style="font-size:28px;color:#a6abba">&rarr;</p>
+<div style="border:1px solid #2a2e3a;border-radius:16px;padding:20px 32px;background:#1f222b"><p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:24px;color:#c7cbd6">Chunks</p></div>
+<p style="font-size:28px;color:#a6abba">&rarr;</p>
+<div style="border:1px solid #2a2e3a;border-radius:16px;padding:20px 32px;background:#1f222b"><p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:24px;color:#c7cbd6">Embeddings</p></div>
+<p style="font-size:28px;color:#a6abba">&rarr;</p>
+<div style="border:1px solid #f2b544;border-radius:16px;padding:20px 32px;background:#1f222b"><p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:24px;color:#f2b544">Vector DB</p></div>
+</div>
+</div>
+<div style="display:flex;flex-direction:column;gap:20px">
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:24px;color:#5fd68f">RETRIEVE + GENERATE &mdash; EVERY QUESTION</p>
+<div style="display:flex;gap:16px;align-items:center">
+<div style="border:1px solid #2a2e3a;border-radius:16px;padding:20px 32px;background:#1f222b"><p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:24px;color:#c7cbd6">Question</p></div>
+<p style="font-size:28px;color:#a6abba">&rarr;</p>
+<div style="border:1px solid #2a2e3a;border-radius:16px;padding:20px 32px;background:#1f222b"><p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:24px;color:#c7cbd6">Nearest Chunks</p></div>
+<p style="font-size:28px;color:#a6abba">&rarr;</p>
+<div style="border:1px solid #2a2e3a;border-radius:16px;padding:20px 32px;background:#1f222b"><p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:24px;color:#c7cbd6">Prompt + Context</p></div>
+<p style="font-size:28px;color:#a6abba">&rarr;</p>
+<div style="border:1px solid #5fd68f;border-radius:16px;padding:20px 32px;background:#1f222b"><p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:24px;color:#5fd68f">Answer + Source</p></div>
+</div>
+</div>
+<p style="font-size:28px;color:#a6abba">The expensive part &mdash; embedding every chunk &mdash; happens once, up front. Every question after that only embeds the (short) query and searches vectors already sitting in the index.</p>
+<p style="position:absolute;left:128px;bottom:64px;font-size:24px;color:#a6abba">agents-workshop &middot; RAG agent</p>
+<p style="position:absolute;right:128px;bottom:64px;font-size:24px;color:#a6abba">3 of 11</p>
+</section>
+</div>
+<div class="slide-stage" data-index="5">
+<section id="code03-concept-indexing" data-transition="fade" style="background:#14161c;color:#e8e6df;font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;justify-content:flex-start;gap:40px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:28px;color:#f2b544">01 &middot; CONCEPT</p>
+<h2 style="font-size:72px;font-weight:700;color:#f5f4f0">Indexing, Step by Step</h2>
+</div>
+<p style="font-size:28px;color:#a6abba">The slow, one-time half of RAG &mdash; everything here happens once per (document, embedding model) pair, before a single question is ever asked.</p>
+<div style="display:flex;gap:16px;align-items:stretch;flex:1">
+<div style="flex:1;display:flex;flex-direction:column;gap:14px;background:#1f222b;border:1px solid #2a2e3a;border-radius:16px;padding:32px 28px">
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:22px;color:#f2b544;font-weight:700">01</p>
+<h3 style="font-size:28px;font-weight:600;color:#f5f4f0">Load</h3>
+<p style="font-size:22px;color:#c7cbd6">Every source becomes plain-text Documents &mdash; one per PDF page, one per crawled URL.</p>
+</div>
+<p style="font-size:32px;color:#a6abba;align-self:center">&rarr;</p>
+<div style="flex:1;display:flex;flex-direction:column;gap:14px;background:#1f222b;border:1px solid #2a2e3a;border-radius:16px;padding:32px 28px">
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:22px;color:#f2b544;font-weight:700">02</p>
+<h3 style="font-size:28px;font-weight:600;color:#f5f4f0">Split</h3>
+<p style="font-size:22px;color:#c7cbd6">Cut into ~1000-character chunks with 150-character overlap, so no sentence loses its surrounding context.</p>
+</div>
+<p style="font-size:32px;color:#a6abba;align-self:center">&rarr;</p>
+<div style="flex:1;display:flex;flex-direction:column;gap:14px;background:#1f222b;border:1px solid #2a2e3a;border-radius:16px;padding:32px 28px">
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:22px;color:#5fd68f;font-weight:700">03</p>
+<h3 style="font-size:28px;font-weight:600;color:#f5f4f0">Embed</h3>
+<p style="font-size:22px;color:#c7cbd6">Each chunk becomes a vector via the embedding model &mdash; similar meaning lands nearby, regardless of exact wording.</p>
+</div>
+<p style="font-size:32px;color:#a6abba;align-self:center">&rarr;</p>
+<div style="flex:1;display:flex;flex-direction:column;gap:14px;background:#1f222b;border:1px solid #f2b544;border-radius:16px;padding:32px 28px">
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:22px;color:#f2b544;font-weight:700">04</p>
+<h3 style="font-size:28px;font-weight:600;color:#f5f4f0">Store</h3>
+<p style="font-size:22px;color:#c7cbd6">Chroma persists every vector, its text, and its citation to disk &mdash; keyed so it&rsquo;s only ever built once.</p>
+</div>
+</div>
+<p style="position:absolute;left:128px;bottom:64px;font-size:24px;color:#a6abba">agents-workshop &middot; RAG agent</p>
+<p style="position:absolute;right:128px;bottom:64px;font-size:24px;color:#a6abba">4 of 11</p>
+</section>
+</div>
+<div class="slide-stage" data-index="6">
+<section id="code03-concept-retrieval" data-transition="fade" style="background:#14161c;color:#e8e6df;font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;justify-content:flex-start;gap:40px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:28px;color:#f2b544">01 &middot; CONCEPT</p>
+<h2 style="font-size:72px;font-weight:700;color:#f5f4f0">Retrieval, Step by Step</h2>
+</div>
+<p style="font-size:28px;color:#a6abba">The fast half, repeated on every question &mdash; no re-reading the document, no re-embedding anything but the question itself.</p>
+<div style="display:flex;gap:48px;flex:1;align-items:center">
+<div style="flex:1.1;background:#0d0f13;border:1px solid #2a2e3a;border-radius:16px;padding:24px;display:flex;flex-direction:column;align-items:center;gap:12px">
+<svg width="100%" height="300" viewBox="0 0 640 320" aria-label="A query vector surrounded by its 4 nearest chunk vectors in embedding space, with other chunks scattered farther away">
+<circle cx="50" cy="40" r="7" fill="#2a2e3a"/>
+<circle cx="580" cy="55" r="7" fill="#2a2e3a"/>
+<circle cx="40" cy="280" r="7" fill="#2a2e3a"/>
+<circle cx="590" cy="270" r="7" fill="#2a2e3a"/>
+<circle cx="25" cy="160" r="7" fill="#2a2e3a"/>
+<circle cx="610" cy="160" r="7" fill="#2a2e3a"/>
+<circle cx="320" cy="20" r="7" fill="#2a2e3a"/>
+<circle cx="150" cy="290" r="7" fill="#2a2e3a"/>
+<circle cx="470" cy="75" r="7" fill="#2a2e3a"/>
+<circle cx="470" cy="270" r="7" fill="#2a2e3a"/>
+<line x1="320" y1="170" x2="270" y2="120" stroke="#5fd68f" stroke-width="2"/>
+<line x1="320" y1="170" x2="375" y2="130" stroke="#5fd68f" stroke-width="2"/>
+<line x1="320" y1="170" x2="265" y2="220" stroke="#5fd68f" stroke-width="2"/>
+<line x1="320" y1="170" x2="370" y2="215" stroke="#5fd68f" stroke-width="2"/>
+<circle cx="270" cy="120" r="10" fill="#5fd68f"/>
+<circle cx="375" cy="130" r="10" fill="#5fd68f"/>
+<circle cx="265" cy="220" r="10" fill="#5fd68f"/>
+<circle cx="370" cy="215" r="10" fill="#5fd68f"/>
+<circle cx="320" cy="170" r="18" fill="#f2b544"/>
+<text x="320" y="176" font-size="18" fill="#0d0f13" text-anchor="middle">Q</text>
+</svg>
+<p style="font-size:20px;color:#a6abba">Amber = the question&rsquo;s vector. Green = the k=4 nearest chunks returned. Gray = everything else in the index, ignored.</p>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:24px">
+<div style="display:flex;flex-direction:column;gap:6px">
+<h3 style="font-size:26px;font-weight:600;color:#5fd68f">1 &middot; Embed the question</h3>
+<p style="font-size:22px;color:#c7cbd6">The same embedding model places the question in the same vector space as every stored chunk.</p>
+</div>
+<div style="display:flex;flex-direction:column;gap:6px">
+<h3 style="font-size:26px;font-weight:600;color:#5fd68f">2 &middot; Nearest-neighbor search</h3>
+<p style="font-size:22px;color:#c7cbd6">Chroma returns the k=4 closest chunks by vector distance &mdash; semantic similarity, not keyword matching.</p>
+</div>
+<div style="display:flex;flex-direction:column;gap:6px">
+<h3 style="font-size:26px;font-weight:600;color:#5fd68f">3 &middot; Assemble context</h3>
+<p style="font-size:22px;color:#c7cbd6">Each result&rsquo;s citation and text are joined into one string &mdash; the tool&rsquo;s return value.</p>
+</div>
+<div style="display:flex;flex-direction:column;gap:6px">
+<h3 style="font-size:26px;font-weight:600;color:#f2b544">4 &middot; Generate the answer</h3>
+<p style="font-size:22px;color:#c7cbd6">The model reads the question plus that context, and writes an answer quoting the citation already sitting next to the text.</p>
+</div>
+</div>
+</div>
+<p style="position:absolute;left:128px;bottom:64px;font-size:24px;color:#a6abba">agents-workshop &middot; RAG agent</p>
+<p style="position:absolute;right:128px;bottom:64px;font-size:24px;color:#a6abba">5 of 11</p>
+</section>
+</div>
+<div class="slide-stage" data-index="7">
+<section id="code03-code-indexing" data-transition="fade" style="background:#14161c;color:#e8e6df;font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;justify-content:flex-start;gap:40px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:28px;color:#f2b544">02 &middot; CODE</p>
+<h2 style="font-size:72px;font-weight:700;color:#f5f4f0">Where RAG Is Indexed</h2>
+</div>
+<div style="background:#1f222b;border:1px solid #2a2e3a;border-radius:16px;padding:40px 56px;display:flex;flex-direction:column;gap:6px">
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:24px;color:#e8e6df">db_path = self._db_path(pdf_bytes, crawl_url, embedding_model)</p>
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:24px;color:#e8e6df">self.vectorstore = Chroma(</p>
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:24px;color:#5fd68f">&nbsp;&nbsp;&nbsp;&nbsp;persist_directory=db_path, embedding_function=embeddings,</p>
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:24px;color:#5fd68f">&nbsp;&nbsp;&nbsp;&nbsp;create_collection_if_not_exists=True)</p>
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:24px;color:#e8e6df">if self.num_chunks == 0:</p>
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:24px;color:#5fd68f">&nbsp;&nbsp;&nbsp;&nbsp;self.vectorstore.add_documents(pdf_chunks + web_chunks)</p>
+</div>
+<p style="font-size:28px;color:#a6abba"><b style="color:#c7cbd6;font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace">db_path</b> is a hash of (PDF bytes, crawl URL, embedding model), under <b style="color:#c7cbd6;font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace">data/</b>. The same trio reopens the existing Chroma collection instantly &mdash; change any one of them and a fresh collection builds instead of mixing with stale vectors from a different document or model.</p>
+<p style="position:absolute;left:128px;bottom:64px;font-size:24px;color:#a6abba">agents-workshop &middot; RAG agent</p>
+<p style="position:absolute;right:128px;bottom:64px;font-size:24px;color:#a6abba">6 of 11</p>
+</section>
+</div>
+<div class="slide-stage" data-index="8">
+<section id="code03-code-sources" data-transition="fade" style="background:#14161c;color:#e8e6df;font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;justify-content:flex-start;gap:40px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:28px;color:#f2b544">02 &middot; CODE</p>
+<h2 style="font-size:72px;font-weight:700;color:#f5f4f0">Two Sources, One Index</h2>
+</div>
+<div style="background:#1f222b;border:1px solid #2a2e3a;border-radius:16px;padding:40px 56px;display:flex;flex-direction:column;gap:6px">
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:24px;color:#e8e6df">pdf_chunks = splitter.split_documents(PyPDFLoader(pdf_path).load())</p>
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:24px;color:#5fd68f">web_chunks = splitter.split_documents(self._crawl_docs(crawl_url))</p>
+</div>
+<p style="font-size:28px;color:#a6abba"><b style="color:#c7cbd6;font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace">PyPDFLoader</b> yields one Document per PDF page, so page numbers survive into chunk metadata. <b style="color:#c7cbd6;font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace">RecursiveUrlLoader(url, max_depth=2)</b> crawls the docs site up to 2 links deep, one Document per URL. Both get split the <i>same</i> way, so <b style="color:#c7cbd6;font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace">rag_search</b> never has to know which source a given chunk came from &mdash; they live in one combined Chroma collection.</p>
+<div style="display:flex;gap:14px">
+<div style="border:1px solid #2a2e3a;border-radius:999px;padding:14px 24px;background:#1f222b"><p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:22px;color:#c7cbd6">source: file path + page</p></div>
+<div style="border:1px solid #2a2e3a;border-radius:999px;padding:14px 24px;background:#1f222b"><p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:22px;color:#c7cbd6">source: url</p></div>
+</div>
+<p style="position:absolute;left:128px;bottom:64px;font-size:24px;color:#a6abba">agents-workshop &middot; RAG agent</p>
+<p style="position:absolute;right:128px;bottom:64px;font-size:24px;color:#a6abba">7 of 11</p>
+</section>
+</div>
+<div class="slide-stage" data-index="9">
+<section id="code03-code-search" data-transition="fade" style="background:#14161c;color:#e8e6df;font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;justify-content:flex-start;gap:40px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:28px;color:#f2b544">02 &middot; CODE</p>
+<h2 style="font-size:72px;font-weight:700;color:#f5f4f0">How It&rsquo;s Used: rag_search</h2>
+</div>
+<div style="background:#1f222b;border:1px solid #2a2e3a;border-radius:16px;padding:40px 56px;display:flex;flex-direction:column;gap:6px">
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:24px;color:#e8e6df">results = self.vectorstore.similarity_search(query, k=4)</p>
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:24px;color:#5fd68f">return "\n\n".join(f"{citation(doc)}\n{doc.page_content}" for doc in results)</p>
+</div>
+<p style="font-size:28px;color:#a6abba">k=4: embed the query, return the 4 closest chunks by vector distance &mdash; any mix of PDF and web pages. Each one comes back tagged with its own citation, built from whatever metadata it has:</p>
+<div style="display:flex;gap:32px">
+<div style="flex:1;background:#1f222b;border:1px solid #2a2e3a;border-radius:16px;padding:32px 40px">
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:22px;color:#e8e6df">[Source: llms-text-generation.pdf, page 75]</p>
+</div>
+<div style="flex:1;background:#1f222b;border:1px solid #2a2e3a;border-radius:16px;padding:32px 40px">
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:22px;color:#e8e6df">[Source: https://docs.incorta.com/latest/blueprints-all]</p>
+</div>
+</div>
+<p style="position:absolute;left:128px;bottom:64px;font-size:24px;color:#a6abba">agents-workshop &middot; RAG agent</p>
+<p style="position:absolute;right:128px;bottom:64px;font-size:24px;color:#a6abba">8 of 11</p>
+</section>
+</div>
+<div class="slide-stage" data-index="10">
+<section id="code03-code-prompt" data-transition="fade" style="background:#14161c;color:#e8e6df;font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;justify-content:flex-start;gap:48px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:28px;color:#f2b544">02 &middot; CODE</p>
+<h2 style="font-size:72px;font-weight:700;color:#f5f4f0">Steering the Agent</h2>
+</div>
+<div style="display:flex;gap:32px;flex:1">
+<div style="flex:1;display:flex;flex-direction:column;gap:16px;background:#1f222b;border:1px solid #2a2e3a;border-radius:16px;padding:40px">
+<h3 style="font-size:30px;font-weight:600;color:#5fd68f">RAG first, always</h3>
+<p style="font-size:25px;color:#c7cbd6">Try <b style="color:#e8e6df;font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace">rag_search</b> before anything else &mdash; never answer from the model&rsquo;s own training knowledge.</p>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:16px;background:#1f222b;border:1px solid #2a2e3a;border-radius:16px;padding:40px">
+<h3 style="font-size:30px;font-weight:600;color:#5fd68f">Web search, only as fallback</h3>
+<p style="font-size:25px;color:#c7cbd6">Only reach for <b style="color:#e8e6df;font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace">duckduckgo_search</b> when rag_search comes back empty or clearly unrelated.</p>
+</div>
+</div>
+<div style="display:flex;gap:32px;flex:1">
+<div style="flex:1;display:flex;flex-direction:column;gap:16px;background:#1f222b;border:1px solid #2a2e3a;border-radius:16px;padding:40px">
+<h3 style="font-size:30px;font-weight:600;color:#5fd68f">Mandatory citation format</h3>
+<p style="font-size:25px;color:#c7cbd6">A RAG answer must end with <b style="color:#e8e6df;font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace">Source: &lt;document&gt;, page &lt;N&gt;</b> or a URL &mdash; copied verbatim from the result, never guessed.</p>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:16px;background:#1f222b;border:1px solid #2a2e3a;border-radius:16px;padding:40px">
+<h3 style="font-size:30px;font-weight:600;color:#5fd68f">Say so if nothing&rsquo;s found</h3>
+<p style="font-size:25px;color:#c7cbd6">If neither tool turns up an answer, say so instead of guessing.</p>
+</div>
+</div>
+<p style="position:absolute;left:128px;bottom:64px;font-size:24px;color:#a6abba">agents-workshop &middot; RAG agent</p>
+<p style="position:absolute;right:128px;bottom:64px;font-size:24px;color:#a6abba">9 of 11</p>
+</section>
+</div>
+<div class="slide-stage" data-index="11">
+<section id="code03-code-prompt-text" data-transition="fade" style="background:#14161c;color:#e8e6df;font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;justify-content:flex-start;gap:32px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:28px;color:#f2b544">02 &middot; CODE</p>
+<h2 style="font-size:72px;font-weight:700;color:#f5f4f0">The Prompt, Verbatim</h2>
+</div>
+<div style="background:#1f222b;border:1px solid #2a2e3a;border-radius:16px;padding:32px 48px;display:flex;flex-direction:column;gap:12px">
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:21px;color:#e8e6df;line-height:1.35">You are a RAG agent that answers questions using an uploaded PDF and a crawled set of documentation pages, both indexed into the same <b style="color:#5fd68f">rag_search</b> tool.</p>
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:21px;color:#f2b544;line-height:1.35;font-weight:700">NEVER answer from your knowledge.</p>
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:21px;color:#e8e6df;line-height:1.35">Always try <b style="color:#5fd68f">rag_search</b> first. Only use <b style="color:#5fd68f">duckduckgo_search</b> if neither the PDF nor the documentation pages contain the answer &mdash; rag_search comes back empty, or its passages are clearly unrelated.</p>
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:21px;color:#e8e6df;line-height:1.35">Whichever tool you used, always report the source: a PDF passage ends with <b style="color:#5fd68f">Source: &lt;document name&gt;, page &lt;N&gt;</b>; a documentation page ends with <b style="color:#5fd68f">Source: &lt;url&gt;</b> &mdash; copied verbatim, never guessed or renumbered. A web search result says plainly it came from a web search, not the indexed documents.</p>
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:21px;color:#e8e6df;line-height:1.35">If none of the tools turn up an answer, say so instead of guessing.</p>
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:21px;color:#e8e6df;line-height:1.35">Answer in plain language. Do not describe your search process beyond the required source citation.</p>
+</div>
+<p style="position:absolute;left:128px;bottom:64px;font-size:24px;color:#a6abba">agents-workshop &middot; RAG agent</p>
+<p style="position:absolute;right:128px;bottom:64px;font-size:24px;color:#a6abba">10 of 11</p>
+</section>
+</div>
+<div class="slide-stage" data-index="12">
+<section id="code03-code-assemble" data-transition="fade" style="background:#14161c;color:#e8e6df;font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;justify-content:flex-start;gap:40px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:28px;color:#f2b544">02 &middot; CODE</p>
+<h2 style="font-size:72px;font-weight:700;color:#f5f4f0">Assembling the Agent</h2>
+</div>
+<div style="background:#1f222b;border:1px solid #2a2e3a;border-radius:16px;padding:40px 56px;display:flex;flex-direction:column;gap:6px">
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:25px;color:#e8e6df">rag = RAGTools(pdf_path, pdf_bytes, crawl_url, embedding_model, base_url)</p>
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:25px;color:#e8e6df">tools = rag.get_tools() + DuckDuckGoTools().get_tools()</p>
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:25px;color:#e8e6df">agent = create_deep_agent(</p>
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:25px;color:#5fd68f">&nbsp;&nbsp;&nbsp;&nbsp;model=llm, tools=tools, system_prompt=INSTRUCTIONS,</p>
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:25px;color:#5fd68f">&nbsp;&nbsp;&nbsp;&nbsp;checkpointer=InMemorySaver())</p>
+</div>
+<p style="font-size:28px;color:#a6abba">The exact same <b style="color:#c7cbd6;font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace">create_deep_agent(model, tools, system_prompt, checkpointer)</b> shape as 01&rsquo;s SQL agent &mdash; only the tools changed. The ReAct loop, the planning, the per-thread memory, and MLflow tracing all come from the same <b style="color:#c7cbd6;font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace">deepagents</b> framework, untouched.</p>
+<p style="position:absolute;left:128px;bottom:64px;font-size:24px;color:#a6abba">agents-workshop &middot; RAG agent</p>
+<p style="position:absolute;right:128px;bottom:64px;font-size:24px;color:#a6abba">11 of 11</p>
+</section>
+</div>
+</div>
+<div class="counter" id="counter">1 / 13</div>
+<div class="hint" id="hint">&larr; &rarr; to navigate</div>
+<script>
+(function() {
+  var stages = Array.prototype.slice.call(document.querySelectorAll('.slide-stage'));
+  var counter = document.getElementById('counter');
+  var hint = document.getElementById('hint');
+  var viewport = document.getElementById('viewport');
+  var idx = 0;
+
+  function layout() {
+    var scale = Math.min(window.innerWidth / 1920, window.innerHeight / 1080);
+    stages.forEach(function(s) {
+      s.style.transform = 'translate(-50%,-50%) scale(' + scale + ')';
+    });
+  }
+
+  function show(i) {
+    idx = Math.max(0, Math.min(stages.length - 1, i));
+    stages.forEach(function(s, j) { s.classList.toggle('active', j === idx); });
+    counter.textContent = (idx + 1) + ' / ' + stages.length;
+  }
+
+  window.addEventListener('resize', layout);
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') { show(idx + 1); e.preventDefault(); }
+    else if (e.key === 'ArrowLeft' || e.key === 'PageUp') { show(idx - 1); e.preventDefault(); }
+    else if (e.key === 'Home') { show(0); e.preventDefault(); }
+    else if (e.key === 'End') { show(stages.length - 1); e.preventDefault(); }
+  });
+  viewport.addEventListener('click', function(e) {
+    var rect = viewport.getBoundingClientRect();
+    if (e.clientX - rect.left > rect.width / 2) show(idx + 1); else show(idx - 1);
+  });
+  hint.classList.add('show');
+  setTimeout(function() { hint.classList.remove('show'); }, 2500);
+
+  layout();
+  show(0);
+})();
+</script>
+</body>
+</html>

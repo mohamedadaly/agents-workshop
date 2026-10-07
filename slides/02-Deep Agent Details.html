@@ -1,0 +1,454 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>02-Deep Agent Details</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+html,body{height:100%;background:#05060a;overflow:hidden;}
+.viewport{width:100vw;height:100vh;position:relative;overflow:hidden;}
+.slide-stage{width:1920px;height:1080px;position:absolute;top:50%;left:50%;
+  transform:translate(-50%,-50%) scale(1);transform-origin:center center;display:none;}
+.slide-stage.active{display:block;}
+.slide-stage > section{width:1920px !important;height:1080px !important;box-sizing:border-box;}
+.slide-stage h1,.slide-stage h2,.slide-stage h3,.slide-stage p,
+.slide-stage ul,.slide-stage ol,.slide-stage table{margin:0;}
+.slide-stage ul,.slide-stage ol{padding-left:1.2em;}
+.counter{position:fixed;bottom:14px;right:18px;color:#a6abba;
+  font:14px ui-monospace,'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;
+  background:rgba(0,0,0,0.45);padding:5px 12px;border-radius:12px;z-index:10;
+  user-select:none;}
+.hint{position:fixed;bottom:14px;left:18px;color:#6b7080;
+  font:13px ui-monospace,'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;
+  background:rgba(0,0,0,0.45);padding:5px 12px;border-radius:12px;z-index:10;
+  user-select:none;opacity:0;transition:opacity .3s;}
+.viewport:hover ~ .hint, .hint.show{opacity:1;}
+</style>
+</head>
+<body>
+<div class="viewport" id="viewport">
+<div class="slide-stage active" data-index="0">
+<section id="code02-overview" data-transition="fade" style="display:flex; flex-direction:column; gap:40px; align-items:start; justify-content:center; padding:128px; background:#0d0f13">
+  <p style="font-family:monospace; font-size:28px; color:#f2b544">// 02 · EXPLICIT IMPLEMENTATION</p>
+  <h1 style="font-family:sans-serif; font-size:104px; font-weight:700; line-height:1.1; color:#f5f4f0">Smart Agent, in Details</h1>
+  <p style="font-family:sans-serif; font-size:36px; color:#c7cbd6"><span style="color:#e8e6df"><b>02_deep_agent_detail</b></span> rebuilds <span style="color:#e8e6df"><b>build_agent()</b></span> in plain Python — no <span style="color:#e8e6df"><b>deepagents</b></span>, no LangGraph checkpointer.</p>
+  <div style="display:flex; flex-direction:row; gap:20px; align-items:center">
+    <div style="display:flex; flex-direction:column; padding:24px 36px; background:#14161c; border:1px solid #2a2e3a; border-radius:16px">
+      <p style="font-family:monospace; font-size:28px; color:#c7cbd6">Tools</p>
+    </div>
+    <p style="font-family:sans-serif; font-size:32px; color:#a6abba">→</p>
+    <div style="display:flex; flex-direction:column; padding:24px 36px; background:#14161c; border:1px solid #2a2e3a; border-radius:16px">
+      <p style="font-family:monospace; font-size:28px; color:#c7cbd6">Memory</p>
+    </div>
+    <p style="font-family:sans-serif; font-size:32px; color:#a6abba">→</p>
+    <div style="display:flex; flex-direction:column; padding:24px 36px; background:#14161c; border:1px solid #2a2e3a; border-radius:16px">
+      <p style="font-family:monospace; font-size:28px; color:#c7cbd6">DeepAgent</p>
+    </div>
+    <p style="font-family:sans-serif; font-size:32px; color:#a6abba">→</p>
+    <div style="display:flex; flex-direction:column; padding:24px 36px; background:#14161c; border:1px solid #f2b544; border-radius:16px">
+      <p style="font-family:monospace; font-size:28px; color:#f2b544">Answer</p>
+    </div>
+  </div>
+  <p style="position:absolute; bottom:64px; left:128px; font-family:sans-serif; font-size:24px; color:#a6abba">agents-workshop · code walkthrough</p>
+</section>
+</div>
+<div class="slide-stage" data-index="1">
+<section id="code02-contents" data-transition="fade" style="background:#14161c;color:#e8e6df;font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;padding:128px;display:flex;flex-direction:column;justify-content:center;gap:64px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:28px;color:#f2b544">// CONTENTS</p>
+<h2 style="font-size:80px;font-weight:700;color:#f5f4f0">What We&rsquo;ll Cover</h2>
+</div>
+<div style="display:flex;flex-direction:column;gap:0">
+<div style="display:flex;gap:48px;align-items:flex-start;padding:36px 0;border-top:1px solid #2a2e3a">
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:56px;color:#f2b544;width:140px">01</p>
+<div style="display:flex;flex-direction:column;gap:8px">
+<h3 style="font-size:34px;font-weight:600;color:#f5f4f0">Tools</h3>
+<p style="font-size:26px;color:#a6abba">SQLTools and ModelTools &mdash; plain functions, read end to end into a JSON schema.</p>
+</div>
+</div>
+<div style="display:flex;gap:48px;align-items:flex-start;padding:36px 0;border-top:1px solid #2a2e3a">
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:56px;color:#5fd68f;width:140px">02</p>
+<div style="display:flex;flex-direction:column;gap:8px">
+<h3 style="font-size:34px;font-weight:600;color:#f5f4f0">Memory</h3>
+<p style="font-size:26px;color:#a6abba">InMemorySaver and its three methods &mdash; a plain dict, and how one thread_id carries a conversation.</p>
+</div>
+</div>
+<div style="display:flex;gap:48px;align-items:flex-start;padding:36px 0;border-top:1px solid #2a2e3a">
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:56px;color:#c7cbd6;width:140px">03</p>
+<div style="display:flex;flex-direction:column;gap:8px">
+<h3 style="font-size:34px;font-weight:600;color:#f5f4f0">DeepAgent</h3>
+<p style="font-size:26px;color:#a6abba">init, get_state, and invoke &mdash; how the system prompt and tools reach the model, and the loop that drives Thought &rarr; Action &rarr; Observation.</p>
+</div>
+</div>
+<div style="display:flex;gap:48px;align-items:flex-start;padding:36px 0;border-top:1px solid #2a2e3a;border-bottom:1px solid #2a2e3a">
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:56px;color:#f2b544;width:140px">04</p>
+<div style="display:flex;flex-direction:column;gap:8px">
+<h3 style="font-size:34px;font-weight:600;color:#f5f4f0">01 vs. 02</h3>
+<p style="font-size:26px;color:#a6abba">Framework vs. explicit, side by side.</p>
+</div>
+</div>
+</div>
+</section>
+</div>
+<div class="slide-stage" data-index="2">
+<section id="code02-tools" data-transition="fade" style="background:#14161c;color:#e8e6df;font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;justify-content:flex-start;gap:40px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:28px;color:#f2b544">01 &middot; TOOLS</p>
+<h2 style="font-size:72px;font-weight:700;color:#f5f4f0">Tools You Can Read</h2>
+</div>
+<div style="background:#1f222b;border:1px solid #2a2e3a;border-radius:16px;padding:40px 56px;display:flex;flex-direction:column;gap:10px">
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:28px;color:#e8e6df">tools = SQLTools(db=db, llm=llm).get_tools()</p>
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:28px;color:#5fd68f">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;+ [duckduckgo_search]</p>
+</div>
+<p style="font-size:28px;color:#a6abba">No <b style="color:#c7cbd6;font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace">SQLDatabaseToolkit</b>. Each tool is a plain function or bound method &mdash; <b style="color:#c7cbd6;font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace">ModelTools</b> reads its name, signature, and docstring to build the same JSON schema a <b style="color:#c7cbd6">BaseTool</b>&rsquo;s <b style="color:#c7cbd6;font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace">.args_schema</b> would have carried:</p>
+<div style="background:#1f222b;border:1px solid #2a2e3a;border-radius:16px;padding:32px 40px;display:flex;flex-direction:column;gap:6px">
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:21px;color:#a6abba">{"type": "function", "function": {</p>
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:21px;color:#e8e6df">&nbsp;&nbsp;"name": <span style="color:#5fd68f">"sql_db_schema"</span>,</p>
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:21px;color:#e8e6df">&nbsp;&nbsp;"parameters": {"properties": {"table_names": {"type": "string"}}}}}</p>
+</div>
+<p style="position:absolute;left:128px;bottom:64px;font-size:24px;color:#a6abba">agents-workshop &middot; code walkthrough</p>
+<p style="position:absolute;right:128px;bottom:64px;font-size:24px;color:#a6abba">1 of 16</p>
+</section>
+</div>
+<div class="slide-stage" data-index="3">
+<section id="code02-tools-sqltools-class" data-transition="fade" style="background:#14161c;color:#e8e6df;font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;justify-content:flex-start;gap:40px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:28px;color:#f2b544">01 &middot; TOOLS</p>
+<h2 style="font-size:72px;font-weight:700;color:#f5f4f0">The SQLTools Class</h2>
+</div>
+<div style="background:#1f222b;border:1px solid #2a2e3a;border-radius:16px;padding:40px 56px;display:flex;flex-direction:column;gap:6px">
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:25px;color:#e8e6df">class SQLTools:</p>
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:25px;color:#5fd68f">&nbsp;&nbsp;&nbsp;&nbsp;def __init__(self, db, llm):</p>
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:25px;color:#5fd68f">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;self.db = db</p>
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:25px;color:#5fd68f">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;self.llm = llm</p>
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:25px;color:#e8e6df">&nbsp;&nbsp;&nbsp;&nbsp;def sql_db_list_tables(self): ...</p>
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:25px;color:#e8e6df">&nbsp;&nbsp;&nbsp;&nbsp;def sql_db_schema(self, table_names): ...</p>
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:25px;color:#e8e6df">&nbsp;&nbsp;&nbsp;&nbsp;def sql_db_query_checker(self, query): ...</p>
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:25px;color:#e8e6df">&nbsp;&nbsp;&nbsp;&nbsp;def sql_db_query(self, query): ...</p>
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:25px;color:#5fd68f">&nbsp;&nbsp;&nbsp;&nbsp;def get_tools(self):</p>
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:25px;color:#5fd68f">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;return [self.sql_db_list_tables, self.sql_db_schema, ...]</p>
+</div>
+<p style="font-size:27px;color:#a6abba"><b style="color:#c7cbd6;font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace">db</b>/<b style="color:#c7cbd6;font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace">llm</b> stored once on <b style="color:#c7cbd6;font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace">self</b>, instead of four separate closures each capturing their own copy. <b style="color:#c7cbd6;font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace">get_tools()</b> hands back the bound methods themselves &mdash; <b style="color:#c7cbd6;font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace">ModelTools</b> reads a bound method exactly like a free function, since <b style="color:#c7cbd6;font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace">self</b> was already filled in when <b style="color:#c7cbd6;font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace">self.sql_db_schema</b> was looked up.</p>
+<p style="position:absolute;left:128px;bottom:64px;font-size:24px;color:#a6abba">agents-workshop &middot; code walkthrough</p>
+<p style="position:absolute;right:128px;bottom:64px;font-size:24px;color:#a6abba">2 of 16</p>
+</section>
+</div>
+<div class="slide-stage" data-index="4">
+<section id="code02-tools-sqltools" data-transition="fade" style="background:#14161c;color:#e8e6df;font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;justify-content:flex-start;gap:40px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:28px;color:#f2b544">01 &middot; TOOLS</p>
+<h2 style="font-size:72px;font-weight:700;color:#f5f4f0">One Tool, Read End to End</h2>
+</div>
+<div style="background:#1f222b;border:1px solid #2a2e3a;border-radius:16px;padding:40px 56px;display:flex;flex-direction:column;gap:6px">
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:24px;color:#e8e6df">def sql_db_schema(self, table_names: str) -> str:</p>
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:24px;color:#5fd68f">&nbsp;&nbsp;&nbsp;&nbsp;"""Get the CREATE TABLE statement and sample rows.</p>
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:24px;color:#5fd68f">&nbsp;&nbsp;&nbsp;&nbsp;Args:</p>
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:24px;color:#5fd68f">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;table_names: A comma-separated list...</p>
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:24px;color:#5fd68f">&nbsp;&nbsp;&nbsp;&nbsp;"""</p>
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:24px;color:#e8e6df">&nbsp;&nbsp;&nbsp;&nbsp;names = [n.strip() for n in table_names.split(",")]</p>
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:24px;color:#e8e6df">&nbsp;&nbsp;&nbsp;&nbsp;return self.db.get_table_info_no_throw(names)</p>
+</div>
+<p style="font-size:28px;color:#a6abba">Just a bound method on <b style="color:#c7cbd6;font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace">SQLTools</b> &mdash; <b style="color:#c7cbd6;font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace">self.db</b>/<b style="color:#c7cbd6;font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace">self.llm</b> set once in <b style="color:#c7cbd6;font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace">__init__</b>. No <b style="color:#c7cbd6">BaseTool</b> subclass, no pydantic <b style="color:#c7cbd6;font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace">args_schema</b> &mdash; the docstring and signature themselves ARE the schema source.</p>
+<p style="position:absolute;left:128px;bottom:64px;font-size:24px;color:#a6abba">agents-workshop &middot; code walkthrough</p>
+<p style="position:absolute;right:128px;bottom:64px;font-size:24px;color:#a6abba">3 of 16</p>
+</section>
+</div>
+<div class="slide-stage" data-index="5">
+<section id="code02-tools-search" data-transition="fade" style="background:#14161c;color:#e8e6df;font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;justify-content:flex-start;gap:40px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:28px;color:#f2b544">01 &middot; TOOLS</p>
+<h2 style="font-size:72px;font-weight:700;color:#f5f4f0">The Search Tool</h2>
+</div>
+<div style="background:#1f222b;border:1px solid #2a2e3a;border-radius:16px;padding:40px 56px;display:flex;flex-direction:column;gap:6px">
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:25px;color:#e8e6df">def duckduckgo_search(query: str) -> str:</p>
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:25px;color:#5fd68f">&nbsp;&nbsp;&nbsp;&nbsp;"""Search the web for something the database can&rsquo;t answer.</p>
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:25px;color:#5fd68f">&nbsp;&nbsp;&nbsp;&nbsp;Args:</p>
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:25px;color:#5fd68f">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;query: What to search for..."""</p>
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:25px;color:#e8e6df">&nbsp;&nbsp;&nbsp;&nbsp;with DDGS() as ddgs:</p>
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:25px;color:#e8e6df">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;results = list(ddgs.text(query, max_results=5))</p>
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:25px;color:#e8e6df">&nbsp;&nbsp;&nbsp;&nbsp;return " ".join(r["body"] for r in results)</p>
+</div>
+<p style="font-size:27px;color:#a6abba">Calls the <b style="color:#c7cbd6;font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace">ddgs</b> package directly &mdash; the same library LangChain&rsquo;s <b style="color:#c7cbd6">DuckDuckGoSearchRun</b> wraps &mdash; instead of going through a LangChain tool class. A module-level function, not a method: it needs no <b style="color:#c7cbd6;font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace">db</b> or <b style="color:#c7cbd6;font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace">llm</b>, so there&rsquo;s nothing to store on <b style="color:#c7cbd6;font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace">self</b> &mdash; and <b style="color:#c7cbd6;font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace">ModelTools</b> reads it exactly the same way it reads a bound method.</p>
+<p style="position:absolute;left:128px;bottom:64px;font-size:24px;color:#a6abba">agents-workshop &middot; code walkthrough</p>
+<p style="position:absolute;right:128px;bottom:64px;font-size:24px;color:#a6abba">4 of 16</p>
+</section>
+</div>
+<div class="slide-stage" data-index="6">
+<section id="code02-tools-modeltools" data-transition="fade" style="background:#14161c;color:#e8e6df;font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;justify-content:flex-start;gap:40px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:28px;color:#f2b544">01 &middot; TOOLS</p>
+<h2 style="font-size:72px;font-weight:700;color:#f5f4f0">The ModelTools Class</h2>
+</div>
+<div style="background:#1f222b;border:1px solid #2a2e3a;border-radius:16px;padding:40px 56px;display:flex;flex-direction:column;gap:10px">
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:27px;color:#e8e6df">class ModelTools:</p>
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:27px;color:#5fd68f">&nbsp;&nbsp;&nbsp;&nbsp;@staticmethod</p>
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:27px;color:#5fd68f">&nbsp;&nbsp;&nbsp;&nbsp;def schemas(tools: list) -> list[dict]:</p>
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:27px;color:#5fd68f">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;return [ModelTools._tool_schema(t) for t in tools]</p>
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:27px;color:#e8e6df">&nbsp;&nbsp;&nbsp;&nbsp;@staticmethod</p>
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:27px;color:#e8e6df">&nbsp;&nbsp;&nbsp;&nbsp;def _tool_schema(tool) -> dict: ...</p>
+</div>
+<p style="font-size:28px;color:#a6abba">Two static methods, no instance state. <b style="color:#c7cbd6;font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace">schemas()</b> is just a map over <b style="color:#c7cbd6;font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace">_tool_schema()</b> &mdash; one call per tool in the list (next slide). Static because nothing here depends on a particular <b style="color:#c7cbd6;font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace">db</b>, <b style="color:#c7cbd6;font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace">llm</b>, or conversation &mdash; it&rsquo;s pure introspection of the function object itself.</p>
+<p style="position:absolute;left:128px;bottom:64px;font-size:24px;color:#a6abba">agents-workshop &middot; code walkthrough</p>
+<p style="position:absolute;right:128px;bottom:64px;font-size:24px;color:#a6abba">5 of 16</p>
+</section>
+</div>
+<div class="slide-stage" data-index="7">
+<section id="code02-tools-schema" data-transition="fade" style="background:#14161c;color:#e8e6df;font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;justify-content:flex-start;gap:40px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:28px;color:#f2b544">01 &middot; TOOLS</p>
+<h2 style="font-size:72px;font-weight:700;color:#f5f4f0">Docstring &rarr; JSON Schema</h2>
+</div>
+<p style="font-size:28px;color:#a6abba"><b style="color:#c7cbd6;font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace">ModelTools._tool_schema()</b> splits the docstring at <b style="color:#c7cbd6">"Args:"</b>, reads parameter names via <b style="color:#c7cbd6;font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace">inspect.signature()</b>, and assembles this &mdash; verified by actually running it on <b style="color:#c7cbd6;font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace">sql_db_schema</b>:</p>
+<div style="background:#1f222b;border:1px solid #2a2e3a;border-radius:16px;padding:40px 56px;display:flex;flex-direction:column;gap:6px">
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:23px;color:#a6abba">{"type": "function", "function": {</p>
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:23px;color:#e8e6df">&nbsp;&nbsp;"name": <span style="color:#5fd68f">"sql_db_schema"</span>,</p>
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:23px;color:#e8e6df">&nbsp;&nbsp;"description": "Get the CREATE TABLE statement...",</p>
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:23px;color:#e8e6df">&nbsp;&nbsp;"parameters": {"type": "object", "properties": {</p>
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:23px;color:#e8e6df">&nbsp;&nbsp;&nbsp;&nbsp;"table_names": {"type": <span style="color:#5fd68f">"string"</span>, "description": "..."}</p>
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:23px;color:#e8e6df">&nbsp;&nbsp;}, "required": ["table_names"]}}}</p>
+</div>
+<p style="font-size:28px;color:#a6abba">The exact shape Ollama&rsquo;s chat API expects in its <b style="color:#c7cbd6">"tools"</b> list &mdash; and the exact shape <b style="color:#c7cbd6;font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace">convert_to_openai_tool</b> (what the real <b style="color:#c7cbd6;font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace">bind_tools()</b> calls internally) produces for the same function.</p>
+<p style="position:absolute;left:128px;bottom:64px;font-size:24px;color:#a6abba">agents-workshop &middot; code walkthrough</p>
+<p style="position:absolute;right:128px;bottom:64px;font-size:24px;color:#a6abba">6 of 16</p>
+</section>
+</div>
+<div class="slide-stage" data-index="8">
+<section id="code02-memory" data-transition="fade" style="background:#14161c;color:#e8e6df;font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;justify-content:flex-start;gap:56px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:28px;color:#f2b544">02 &middot; MEMORY</p>
+<h2 style="font-size:72px;font-weight:700;color:#f5f4f0">A Plain Dict, Not a Checkpointer</h2>
+</div>
+<div style="background:#1f222b;border:1px solid #2a2e3a;border-radius:16px;padding:48px 56px;display:flex;flex-direction:column;gap:10px">
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:28px;color:#e8e6df">class InMemorySaver:</p>
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:26px;color:#5fd68f">&nbsp;&nbsp;&nbsp;&nbsp;def get_messages(self, thread_id): ...</p>
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:26px;color:#5fd68f">&nbsp;&nbsp;&nbsp;&nbsp;def append(self, thread_id, message): ...</p>
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:26px;color:#5fd68f">&nbsp;&nbsp;&nbsp;&nbsp;def seed_system_message(self, thread_id, prompt): ...</p>
+</div>
+<p style="font-size:30px;color:#a6abba">A <b style="color:#c7cbd6;font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace">{thread_id: [messages]}</b> dict &mdash; the same role 01&rsquo;s LangGraph <b style="color:#c7cbd6;font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace">InMemorySaver</b> plays, with the checkpoint machinery stripped away. <b style="color:#c7cbd6;font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace">DeepAgent</b> reads and writes through it exclusively &mdash; <b style="color:#c7cbd6;font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace">get_state(thread_id)</b> is the only thing the app itself touches.</p>
+<p style="position:absolute;left:128px;bottom:64px;font-size:24px;color:#a6abba">agents-workshop &middot; code walkthrough</p>
+<p style="position:absolute;right:128px;bottom:64px;font-size:24px;color:#a6abba">7 of 16</p>
+</section>
+</div>
+<div class="slide-stage" data-index="9">
+<section id="code02-memory-methods" data-transition="fade" style="display:flex; flex-direction:column; gap:48px; padding:128px 128px 160px; background:#14161c">
+  <div style="display:flex; flex-direction:column; gap:16px">
+    <p style="font-family:monospace; font-size:28px; color:#f2b544">02 · MEMORY</p>
+    <h2 style="font-family:sans-serif; font-size:72px; font-weight:700; color:#f5f4f0">Three Methods, Three Jobs</h2>
+  </div>
+  <div style="display:flex; flex-direction:row; gap:32px; flex:1">
+    <div style="display:flex; flex-direction:column; gap:16px; flex:1; padding:40px; background:#1f222b; border:1px solid #2a2e3a; border-radius:16px">
+      <h3 style="font-family:monospace; font-size:28px; font-weight:600; color:#5fd68f">get_messages</h3>
+      <p style="font-family:sans-serif; font-size:24px; color:#c7cbd6">Returns a thread’s list, creating a new empty one via <span style="color:#e8e6df"><b>dict.setdefault</b></span> the first time it’s seen.</p>
+    </div>
+    <div style="display:flex; flex-direction:column; gap:16px; flex:1; padding:40px; background:#1f222b; border:1px solid #2a2e3a; border-radius:16px">
+      <h3 style="font-family:monospace; font-size:28px; font-weight:600; color:#5fd68f">append</h3>
+      <p style="font-family:sans-serif; font-size:24px; color:#c7cbd6">The only sanctioned way to add a message — everywhere in <span style="color:#e8e6df"><b>DeepAgent</b></span> goes through this instead of mutating the list directly.</p>
+    </div>
+    <div style="display:flex; flex-direction:column; gap:16px; flex:1; padding:40px; background:#1f222b; border:1px solid #2a2e3a; border-radius:16px">
+      <h3 style="font-family:monospace; font-size:26px; font-weight:600; color:#5fd68f">seed_system_message</h3>
+      <p style="font-family:sans-serif; font-size:24px; color:#c7cbd6">A no-op once the thread has any history; otherwise prepends the system prompt as its very <span style="color:#f2b544">first</span> message.</p>
+    </div>
+  </div>
+  <p style="font-family:sans-serif; font-size:28px; color:#a6abba">Together: a brand-new <span style="color:#c7cbd6"><b>thread_id</b></span> gets seeded once, then every turn just <span style="color:#c7cbd6"><b>append()</b></span>s — <span style="color:#c7cbd6"><b>get_messages()</b></span> always reflects the full conversation so far.</p>
+  <p style="position:absolute; bottom:64px; left:128px; font-family:sans-serif; font-size:24px; color:#a6abba">agents-workshop · code walkthrough</p>
+  <p style="position:absolute; right:128px; bottom:64px; font-family:sans-serif; font-size:24px; color:#a6abba">8 of 16</p>
+</section>
+</div>
+<div class="slide-stage" data-index="10">
+<section id="code02-memory-usage" data-transition="fade" style="background:#14161c;color:#e8e6df;font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;justify-content:flex-start;gap:56px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:28px;color:#f2b544">02 &middot; MEMORY</p>
+<h2 style="font-size:72px;font-weight:700;color:#f5f4f0">One thread_id, Every Turn</h2>
+</div>
+<div style="background:#1f222b;border:1px solid #2a2e3a;border-radius:16px;padding:48px 56px;display:flex;flex-direction:column;gap:10px">
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:28px;color:#e8e6df">thread_id = st.session_state["thread_id"]</p>
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:28px;color:#5fd68f">prior_len = len(agent.get_state(thread_id))</p>
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:28px;color:#5fd68f">answer = agent.invoke(question, thread_id, max_steps)</p>
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:28px;color:#e8e6df">trajectory = agent.get_state(thread_id)[prior_len:]</p>
+</div>
+<p style="font-size:30px;color:#a6abba">Same <b style="color:#c7cbd6;font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace">thread_id</b> on every turn &mdash; <b style="color:#c7cbd6;font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace">invoke()</b> seeds the system prompt once, then keeps appending to that thread&rsquo;s list. A fresh <b style="color:#c7cbd6;font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace">uuid4()</b> on Clear Chat starts a brand-new thread &mdash; the old one just becomes unreachable, the same way rotating 01&rsquo;s LangGraph thread_id does.</p>
+<p style="position:absolute;left:128px;bottom:64px;font-size:24px;color:#a6abba">agents-workshop &middot; code walkthrough</p>
+<p style="position:absolute;right:128px;bottom:64px;font-size:24px;color:#a6abba">9 of 16</p>
+</section>
+</div>
+<div class="slide-stage" data-index="11">
+<section id="code02-loop-init" data-transition="fade" style="background:#14161c;color:#e8e6df;font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;justify-content:flex-start;gap:40px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:28px;color:#f2b544">03 &middot; DEEPAGENT</p>
+<h2 style="font-size:72px;font-weight:700;color:#f5f4f0">Assembling DeepAgent</h2>
+</div>
+<div style="background:#1f222b;border:1px solid #2a2e3a;border-radius:16px;padding:40px 56px;display:flex;flex-direction:column;gap:8px">
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:27px;color:#e8e6df">class DeepAgent:</p>
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:27px;color:#e8e6df">&nbsp;&nbsp;&nbsp;&nbsp;def __init__(self, model, tools, system_prompt, checkpointer):</p>
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:27px;color:#5fd68f">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;self.llm = model</p>
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:27px;color:#5fd68f">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;self.tool_schemas = ModelTools.schemas(tools)</p>
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:27px;color:#e8e6df">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;self.tools_by_name = {t.__name__: t for t in tools}</p>
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:27px;color:#e8e6df">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;self.system_prompt = system_prompt</p>
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:27px;color:#e8e6df">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;self.checkpointer = checkpointer</p>
+</div>
+<p style="font-size:28px;color:#a6abba">Same <b style="color:#c7cbd6;font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace">(model, tools, system_prompt, checkpointer)</b> shape <b style="color:#c7cbd6;font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace">create_deep_agent</b> takes in 01 &mdash; no <b style="color:#c7cbd6">RunnableBinding</b>, no LangGraph compile step. Just four plain attributes <b style="color:#c7cbd6;font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace">invoke()</b> reads from directly.</p>
+<p style="position:absolute;left:128px;bottom:64px;font-size:24px;color:#a6abba">agents-workshop &middot; code walkthrough</p>
+<p style="position:absolute;right:128px;bottom:64px;font-size:24px;color:#a6abba">10 of 16</p>
+</section>
+</div>
+<div class="slide-stage" data-index="12">
+<section id="code02-deepagent-prompt" data-transition="fade" style="background:#14161c;color:#e8e6df;font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;justify-content:flex-start;gap:40px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:28px;color:#f2b544">03 &middot; DEEPAGENT</p>
+<h2 style="font-size:72px;font-weight:700;color:#f5f4f0">How the Model Actually Sees It</h2>
+</div>
+<div style="background:#1f222b;border:1px solid #2a2e3a;border-radius:16px;padding:40px 56px;display:flex;flex-direction:column;gap:8px">
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:26px;color:#5fd68f">self.checkpointer.seed_system_message(thread_id, self.system_prompt)</p>
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:26px;color:#e8e6df">self.checkpointer.append(thread_id, HumanMessage(content=question))</p>
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:26px;color:#e8e6df">messages = self.checkpointer.get_messages(thread_id)</p>
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:26px;color:#e8e6df">&nbsp;</p>
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:26px;color:#5fd68f">ai_message = self.llm.invoke(messages, tools=self.tool_schemas)</p>
+</div>
+<p style="font-size:27px;color:#a6abba">The system prompt isn&rsquo;t a separate parameter to <b style="color:#c7cbd6;font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace">invoke()</b> &mdash; it&rsquo;s the first message in the thread&rsquo;s own history, seeded once. <b style="color:#c7cbd6;font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace">tools=self.tool_schemas</b> is passed explicitly on every call &mdash; no persistent binding. <b style="color:#c7cbd6;font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace">messages</b> already carries the system prompt, every prior turn, and this turn&rsquo;s question, so the model sees its full context plus its tool menu in one list and one kwarg.</p>
+<p style="position:absolute;left:128px;bottom:64px;font-size:24px;color:#a6abba">agents-workshop &middot; code walkthrough</p>
+<p style="position:absolute;right:128px;bottom:64px;font-size:24px;color:#a6abba">11 of 16</p>
+</section>
+</div>
+<div class="slide-stage" data-index="13">
+<section id="code02-deepagent-getstate" data-transition="fade" style="background:#14161c;color:#e8e6df;font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;justify-content:flex-start;gap:56px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:28px;color:#f2b544">03 &middot; DEEPAGENT</p>
+<h2 style="font-size:72px;font-weight:700;color:#f5f4f0">get_state(): Reading, Not Owning</h2>
+</div>
+<div style="background:#1f222b;border:1px solid #2a2e3a;border-radius:16px;padding:48px 56px;display:flex;flex-direction:column;gap:10px">
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:27px;color:#e8e6df">def get_state(self, thread_id: str) -> list:</p>
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:27px;color:#5fd68f">&nbsp;&nbsp;&nbsp;&nbsp;return self.checkpointer.get_messages(thread_id)</p>
+</div>
+<p style="font-size:30px;color:#a6abba"><b style="color:#c7cbd6;font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace">DeepAgent</b> doesn&rsquo;t store the conversation itself &mdash; the checkpointer does. <b style="color:#c7cbd6;font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace">get_state()</b> is the one sanctioned read, so the app never has to know <b style="color:#c7cbd6;font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace">agent.checkpointer</b> exists. Streamlit uses it to slice out each turn&rsquo;s trajectory &mdash; the same role 01&rsquo;s <b style="color:#c7cbd6;font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace">agent.get_state(config).values["messages"]</b> plays.</p>
+<p style="position:absolute;left:128px;bottom:64px;font-size:24px;color:#a6abba">agents-workshop &middot; code walkthrough</p>
+<p style="position:absolute;right:128px;bottom:64px;font-size:24px;color:#a6abba">12 of 16</p>
+</section>
+</div>
+<div class="slide-stage" data-index="14">
+<section id="code02-react-loop" data-transition="fade" style="background:#14161c;color:#e8e6df;font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;justify-content:flex-start;gap:40px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:28px;color:#f2b544">03 &middot; DEEPAGENT</p>
+<h2 style="font-size:72px;font-weight:700;color:#f5f4f0">invoke(): The Loop, Spelled Out</h2>
+</div>
+<div style="background:#1f222b;border:1px solid #2a2e3a;border-radius:16px;padding:40px 56px;display:flex;flex-direction:column;gap:8px">
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:25px;color:#e8e6df">for _ in range(max_steps):</p>
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:25px;color:#5fd68f">&nbsp;&nbsp;&nbsp;&nbsp;ai_message = self.llm.invoke(messages, tools=schemas)</p>
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:25px;color:#e8e6df">&nbsp;&nbsp;&nbsp;&nbsp;checkpointer.append(thread_id, ai_message)</p>
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:25px;color:#5fd68f">&nbsp;&nbsp;&nbsp;&nbsp;if not ai_message.tool_calls:</p>
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:25px;color:#5fd68f">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;return ai_message.content</p>
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:25px;color:#e8e6df">&nbsp;&nbsp;&nbsp;&nbsp;for call in ai_message.tool_calls:</p>
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:25px;color:#e8e6df">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;result = tools_by_name[call["name"]](**call["args"])</p>
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:25px;color:#e8e6df">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;checkpointer.append(thread_id, ToolMessage(result, ...))</p>
+</div>
+<p style="font-size:28px;color:#a6abba">No LangGraph node graph &mdash; just a <b style="color:#c7cbd6">for</b> loop. <b style="color:#5fd68f">Thought</b> (model call) &rarr; <b style="color:#5fd68f">Action</b> (tool dispatch) &rarr; <b style="color:#5fd68f">Observation</b> (ToolMessage appended) &rarr; repeat, until the model answers without a tool call or <b style="color:#c7cbd6;font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace">max_steps</b> runs out.</p>
+<p style="position:absolute;left:128px;bottom:64px;font-size:24px;color:#a6abba">agents-workshop &middot; code walkthrough</p>
+<p style="position:absolute;right:128px;bottom:64px;font-size:24px;color:#a6abba">13 of 16</p>
+</section>
+</div>
+<div class="slide-stage" data-index="15">
+<section id="code02-loop-dispatch" data-transition="fade" style="background:#14161c;color:#e8e6df;font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;justify-content:flex-start;gap:40px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:28px;color:#f2b544">03 &middot; DEEPAGENT</p>
+<h2 style="font-size:72px;font-weight:700;color:#f5f4f0">Dispatching a Tool Call</h2>
+</div>
+<div style="background:#1f222b;border:1px solid #2a2e3a;border-radius:16px;padding:40px 56px;display:flex;flex-direction:column;gap:8px">
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:27px;color:#e8e6df">for tool_call in ai_message.tool_calls:</p>
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:27px;color:#e8e6df">&nbsp;&nbsp;&nbsp;&nbsp;tool = self.tools_by_name[tool_call["name"]]</p>
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:27px;color:#5fd68f">&nbsp;&nbsp;&nbsp;&nbsp;result = tool(**tool_call["args"])</p>
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:27px;color:#e8e6df">&nbsp;&nbsp;&nbsp;&nbsp;checkpointer.append(thread_id, ToolMessage(</p>
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:27px;color:#e8e6df">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;content=str(result), tool_call_id=tool_call["id"]))</p>
+</div>
+<p style="font-size:28px;color:#a6abba"><b style="color:#c7cbd6;font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace">tool_calls</b> comes back as a list of <b style="color:#c7cbd6">{name, args, id}</b> dicts &mdash; <b style="color:#c7cbd6;font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace">tools_by_name</b> looks up the right plain function and calls it with <b style="color:#c7cbd6;font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace">**args</b>, same as calling it directly in Python. The result is tagged with <b style="color:#c7cbd6;font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace">tool_call_id</b> so the model can match it back to its request.</p>
+<p style="position:absolute;left:128px;bottom:64px;font-size:24px;color:#a6abba">agents-workshop &middot; code walkthrough</p>
+<p style="position:absolute;right:128px;bottom:64px;font-size:24px;color:#a6abba">14 of 16</p>
+</section>
+</div>
+<div class="slide-stage" data-index="16">
+<section id="code02-deepagent-trace" data-transition="fade" style="background:#14161c;color:#e8e6df;font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;justify-content:flex-start;gap:40px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:28px;color:#f2b544">03 &middot; DEEPAGENT</p>
+<h2 style="font-size:72px;font-weight:700;color:#f5f4f0">One Trace Per Turn</h2>
+</div>
+<div style="background:#1f222b;border:1px solid #2a2e3a;border-radius:16px;padding:40px 56px;display:flex;flex-direction:column;gap:8px">
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:26px;color:#5fd68f">@mlflow.trace(name="DeepAgent.invoke", span_type="AGENT")</p>
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:26px;color:#e8e6df">def invoke(self, question, thread_id, max_steps):</p>
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:26px;color:#e8e6df">&nbsp;&nbsp;&nbsp;&nbsp;...</p>
+</div>
+<p style="font-size:27px;color:#a6abba">Without it, <b style="color:#c7cbd6;font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace">mlflow.langchain.autolog()</b> starts a new top-level trace at every <b style="color:#c7cbd6;font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace">self.llm.invoke()</b> call inside the loop &mdash; there&rsquo;s no LangGraph Runnable here to nest them under, unlike 01. Confirmed by actually checking: a 3-tool-call question logged <b style="color:#c7cbd6">3 separate root traces</b> before this decorator, <b style="color:#5fd68f">1 trace with 3 nested spans</b> after. One parent span per turn, not per model call.</p>
+<p style="position:absolute;left:128px;bottom:64px;font-size:24px;color:#a6abba">agents-workshop &middot; code walkthrough</p>
+<p style="position:absolute;right:128px;bottom:64px;font-size:24px;color:#a6abba">15 of 16</p>
+</section>
+</div>
+<div class="slide-stage" data-index="17">
+<section id="code02-compare" data-transition="fade" style="background:#14161c;color:#e8e6df;font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;justify-content:flex-start;gap:40px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-family:ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;font-size:28px;color:#f2b544">04 &middot; COMPARE</p>
+<h2 style="font-size:72px;font-weight:700;color:#f5f4f0">Framework vs. Explicit</h2>
+</div>
+<div style="display:flex;gap:32px;flex:1">
+<div style="flex:1;display:flex;flex-direction:column;gap:24px;background:#1f222b;border:1px solid #f2b544;border-radius:16px;padding:40px">
+<h3 style="font-size:30px;font-weight:600;color:#f2b544">01 &middot; deepagents</h3>
+<p style="font-size:24px;color:#c7cbd6"><b style="color:#e8e6df">Tools</b> &mdash; SQLDatabaseToolkit.get_tools()</p>
+<p style="font-size:24px;color:#c7cbd6"><b style="color:#e8e6df">Binding</b> &mdash; model.bind_tools(tools)</p>
+<p style="font-size:24px;color:#c7cbd6"><b style="color:#e8e6df">Loop</b> &mdash; compiled into a LangGraph graph</p>
+<p style="font-size:24px;color:#c7cbd6"><b style="color:#e8e6df">Memory</b> &mdash; LangGraph InMemorySaver + thread_id</p>
+<p style="font-size:24px;color:#c7cbd6"><b style="color:#e8e6df">Tracing</b> &mdash; automatic, nested under one graph trace</p>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:24px;background:#1f222b;border:1px solid #5fd68f;border-radius:16px;padding:40px">
+<h3 style="font-size:30px;font-weight:600;color:#5fd68f">02 &middot; Explicit</h3>
+<p style="font-size:24px;color:#c7cbd6"><b style="color:#e8e6df">Tools</b> &mdash; plain functions, read by ModelTools</p>
+<p style="font-size:24px;color:#c7cbd6"><b style="color:#e8e6df">Binding</b> &mdash; model.invoke(messages, tools=schemas)</p>
+<p style="font-size:24px;color:#c7cbd6"><b style="color:#e8e6df">Loop</b> &mdash; a plain Python for loop</p>
+<p style="font-size:24px;color:#c7cbd6"><b style="color:#e8e6df">Memory</b> &mdash; a hand-rolled InMemorySaver dict</p>
+<p style="font-size:24px;color:#c7cbd6"><b style="color:#e8e6df">Tracing</b> &mdash; manual @mlflow.trace on invoke()</p>
+</div>
+</div>
+<p style="font-size:28px;color:#a6abba">Same shape, same ReAct pattern &mdash; <b style="color:#c7cbd6">01</b> gets there faster, <b style="color:#c7cbd6">02</b> makes every step visible.</p>
+<p style="position:absolute;left:128px;bottom:64px;font-size:24px;color:#a6abba">agents-workshop &middot; code walkthrough</p>
+<p style="position:absolute;right:128px;bottom:64px;font-size:24px;color:#a6abba">16 of 16</p>
+</section>
+</div>
+</div>
+<div class="counter" id="counter">1 / 18</div>
+<div class="hint" id="hint">&larr; &rarr; to navigate</div>
+<script>
+(function() {
+  var stages = Array.prototype.slice.call(document.querySelectorAll('.slide-stage'));
+  var counter = document.getElementById('counter');
+  var hint = document.getElementById('hint');
+  var viewport = document.getElementById('viewport');
+  var idx = 0;
+
+  function layout() {
+    var scale = Math.min(window.innerWidth / 1920, window.innerHeight / 1080);
+    stages.forEach(function(s) {
+      s.style.transform = 'translate(-50%,-50%) scale(' + scale + ')';
+    });
+  }
+
+  function show(i) {
+    idx = Math.max(0, Math.min(stages.length - 1, i));
+    stages.forEach(function(s, j) { s.classList.toggle('active', j === idx); });
+    counter.textContent = (idx + 1) + ' / ' + stages.length;
+  }
+
+  window.addEventListener('resize', layout);
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') { show(idx + 1); e.preventDefault(); }
+    else if (e.key === 'ArrowLeft' || e.key === 'PageUp') { show(idx - 1); e.preventDefault(); }
+    else if (e.key === 'Home') { show(0); e.preventDefault(); }
+    else if (e.key === 'End') { show(stages.length - 1); e.preventDefault(); }
+  });
+  viewport.addEventListener('click', function(e) {
+    var rect = viewport.getBoundingClientRect();
+    if (e.clientX - rect.left > rect.width / 2) show(idx + 1); else show(idx - 1);
+  });
+  hint.classList.add('show');
+  setTimeout(function() { hint.classList.remove('show'); }, 2500);
+
+  layout();
+  show(0);
+})();
+</script>
+</body>
+</html>
