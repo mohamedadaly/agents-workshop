@@ -208,7 +208,7 @@ def respond(message, history, connection, max_steps):
     return [trajectory_thought, *thoughts, answer or "The agent didn't return an answer."]
 
 
-with gr.Blocks(title="SQL Deep Agent", fill_height=True) as demo:
+with gr.Blocks(title="01 - SQL Deep Agent", fill_height=True) as demo:
     gr.Markdown("# SQL Deep Agent")
 
     # connection holds {"agent", "tool_names", "tables", "model", "thread_id"}

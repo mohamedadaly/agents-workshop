@@ -14,7 +14,7 @@ import uuid
 import mlflow
 import streamlit as st
 
-st.set_page_config(page_title="SQL Deep Agent (LangChain + Ollama)", layout="wide")
+st.set_page_config(page_title="01 - SQL Deep Agent (LangChain + Ollama)", layout="wide")
 
 # One call enables tracing for every LangChain/LangGraph call made below —
 # each agent.invoke() becomes a trace with nested spans for the model and

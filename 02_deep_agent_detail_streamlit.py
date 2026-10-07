@@ -19,7 +19,7 @@ import uuid
 import mlflow
 import streamlit as st
 
-st.set_page_config(page_title="SQL Agent — Explicit ReAct (LangChain + Ollama)", layout="wide")
+st.set_page_config(page_title="02 - SQL Agent — Explicit ReAct (LangChain + Ollama)", layout="wide")
 
 # One call enables tracing for every LangChain call made below. On its own,
 # autolog starts a new top-level trace at every `llm_with_tools.invoke()` —
@@ -335,6 +335,13 @@ class DeepAgent:
         self.system_prompt = system_prompt
         self.checkpointer = checkpointer
 
+    def get_state(self, thread_id: str) -> list:
+        """A thread's full message history. Callers use this instead of
+        reaching into `agent.checkpointer` directly — the checkpointer is an
+        implementation detail of how DeepAgent remembers things, not part of
+        its public interface."""
+        return self.checkpointer.get_messages(thread_id)
+
     @mlflow.trace(name="DeepAgent.invoke", span_type="AGENT")
     def invoke(self, question: str, thread_id: str, max_steps: int) -> str | None:
         """Ask the model, and if it asked to call a tool instead of answering,
@@ -399,31 +406,14 @@ def build_agent(model: str, base_url: str, db_uri: str):
     tools = SQLTools(db=db, llm=llm).get_tools() + [duckduckgo_search]
 
     # 3. Assembled: DeepAgent takes the same (model, tools, system_prompt,
-    # checkpointer) shape `create_deep_agent` does in 01_deep_agent — binding
-    # the tools to the model happens inside its __init__ (see DeepAgent
-    # above), and a fresh InMemorySaver gives this connection its own
-    # independent conversation memory. bind_tools() does NOT give the model
-    # the ability to run anything — tools never execute there either. It
-    # converts each function above into the JSON
-    # schema OpenAI-style "function calling" APIs expect:
-    #   {"type": "function", "function": {"name": ..., "description": ...,
-    #     "parameters": <json-schema built from the function's signature>}}
-    # and returns a wrapped model (`_ChatModelBinding`) that attaches that list
-    # of schemas to every request it sends to Ollama's chat API from now on.
-    # Ollama's model then does two things on its own, as part of generating
-    # its reply: (a) decide whether this turn needs a tool at all, and (b) if
-    # so, which one and with what arguments — picked by name/description, the
-    # same way it picks any other words to generate. LangChain parses that
-    # raw response back into an `AIMessage`; if the model asked for a tool,
-    # `.tool_calls` comes back populated, e.g.:
-    #   [{"name": "sql_db_list_tables", "args": {},
-    #     "id": "<uuid>", "type": "tool_call"}]
-    # and `.content` is usually empty. If it just answered in words instead,
-    # `.tool_calls` is an empty list and `.content` holds the answer.
-    # `DeepAgent.invoke()` is what reads `.tool_calls` and actually calls
-    # `tools_by_name[name](**args)` — binding only shapes the request.
+    # checkpointer) shape `create_deep_agent` does in 01_deep_agent — the
+    # tool-schema building (ModelTools) and the ReAct loop that dispatches
+    # them (DeepAgent.invoke) are both explained where they're defined above.
+    # A fresh InMemorySaver gives this connection its own independent
+    # conversation memory.
+    checkpointer = InMemorySaver()
     agent = DeepAgent(model=llm, tools=tools, system_prompt=INSTRUCTIONS, 
-                      checkpointer=InMemorySaver())
+                      checkpointer=checkpointer)
     return agent, db.get_usable_table_names()
 
 
@@ -553,11 +543,11 @@ elif question := st.chat_input("Ask a question about the database…"):
         answer = None
         agent = st.session_state["agent"]
         thread_id = st.session_state["thread_id"]
-        # The checkpointer returns the FULL message history for this
-        # thread_id (every prior turn), so grab its length first — that's
-        # how we slice out just this turn's new messages below, the same way
-        # 01_deep_agent slices its checkpointer's prior_state.
-        prior_len = len(agent.checkpointer.get_messages(thread_id))
+        # get_state() returns the FULL message history for this thread_id
+        # (every prior turn), so grab its length first — that's how we slice
+        # out just this turn's new messages below, the same way 01_deep_agent
+        # slices its LangGraph agent's prior_state.
+        prior_len = len(agent.get_state(thread_id))
 
         with st.spinner("Thinking…"):
             try:
@@ -570,7 +560,7 @@ elif question := st.chat_input("Ask a question about the database…"):
         # prior_len would otherwise start with that system message instead of
         # this turn's human question. Filtering it out keeps the trajectory
         # to just this turn's actual steps regardless of that one-time shift.
-        full_history = agent.checkpointer.get_messages(thread_id)
+        full_history = agent.get_state(thread_id)
         trajectory = [msg for msg in full_history[prior_len:] if msg.type != "system"]
         # Only render/save a reply if the loop actually produced one — it
         # stays empty if an exception was raised above, or None if max_steps

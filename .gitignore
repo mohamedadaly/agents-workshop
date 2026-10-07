@@ -4,6 +4,7 @@ __pycache__/
 build/
 dist/
 wheels/
+data/
 *.egg-info
 
 # Virtual environments
@@ -13,3 +14,4 @@ wheels/
 
 .DS_Store
 mlruns/
+
